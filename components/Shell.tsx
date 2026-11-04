@@ -88,10 +88,11 @@ export default function Shell({
         </div>
       </header>
       <main id="main" className="wrap flex-1 py-8 sm:py-10">
-        {backend === "pglite-memory" && viewer === "rgs" && (
+        {backend === "pglite-memory" && (
           <p className="warn-band mb-6 print:hidden" role="status">
-            No database is attached to this deployment. Everything saved here is lost when the server restarts. Attach a
-            Postgres database (Vercel &gt; Storage &gt; Neon) before a real facility uses it.
+            {viewer === "rgs"
+              ? "Demo deployment: no database is attached, so this is sample data that resets on its own. Anything you add here is lost on the next restart. Attach a Postgres database (Vercel > Storage > Neon) before a real facility uses it."
+              : "Demo: sample data that resets on its own."}
           </p>
         )}
         {children}

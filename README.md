@@ -67,6 +67,16 @@ RGS_ADMIN_PASSCODE=rgs-dev RGS_DATA_DIR=.data/rgs npm start
 The cookie value is `sha256("rgs-admin-v1:" + passcode)` in hex, passed as
 `--cookie rgs_admin=<hex>` to `glaze/scripts/audit.mjs` in the glazedweb repo.
 
+## Demo mode
+
+A deployment with no database attached and no consultant passcode set is a
+demo. On every cold start it seeds the demo facility from `lib/demo.ts`
+(the same seed `npm run seed` writes locally), the grower door opens on
+`demo` / `grow-demo`, and the consultant door opens on `rgs-demo`. Both
+sign-in pages say so. Nothing behind either door is real and it resets on
+its own. Attaching a database ends demo mode: the seed stops, and the
+consultant door closes until `RGS_ADMIN_PASSCODE` is set.
+
 ## Environment
 
 See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:

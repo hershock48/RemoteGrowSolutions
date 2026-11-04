@@ -47,7 +47,7 @@ export default async function Admin() {
         {store.backend !== "postgres" && (
           <p className="warn-band mb-6" role="status">
             {store.backend === "pglite-memory"
-              ? "No database is attached to this deployment. Everything saved is lost when the server restarts. Attach a Postgres database (Vercel > Storage > Neon) before a real facility uses it."
+              ? "Demo deployment: no database is attached, so this is sample data that resets on its own. Attach a Postgres database (Vercel > Storage > Neon) before a real facility uses it."
               : "Development storage: embedded Postgres in .data/."}
           </p>
         )}

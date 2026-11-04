@@ -111,12 +111,23 @@ async function open(): Promise<Querier> {
     pg = new PGlite();
   }
   await pg.exec(SCHEMA);
-  return {
+  const querier: Querier = {
     query: async (sql, params) => {
       const r = await pg.query(sql, params as never[]);
       return { rows: r.rows as Row[] };
     },
   };
+  if (which === "pglite-memory") {
+    // No database attached means nothing real can live here, so the deployment
+    // is a demo: seed the demo facility on every cold start so the preview
+    // link shows a working dashboard rather than an empty one. The moment a
+    // database is attached this branch is never taken again.
+    const { seedDemo } = await import("./demo");
+    const { todayIn } = await import("./dates");
+    const { SITE } = await import("./site");
+    console.log(`[rgs] no database attached; ${await seedDemo(querier, todayIn(SITE.timezone))}`);
+  }
+  return querier;
 }
 
 export function newId(prefix: string): string {

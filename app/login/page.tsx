@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { clientLogin } from "@/app/actions";
+import { isDemoDeployment } from "@/lib/auth";
+import { DEMO_PASSCODE, DEMO_SLUG } from "@/lib/demo";
 
 export const metadata: Metadata = {
   title: "Client sign in",
@@ -13,6 +15,7 @@ type SP = Promise<{ slug?: string; err?: string }>;
 
 export default async function Login({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
+  const demo = isDemoDeployment();
   return (
     <>
       <Nav />
@@ -24,6 +27,12 @@ export default async function Login({ searchParams }: { searchParams: SP }) {
             Your facility name and passcode were given to you by phone at onboarding.
           </p>
           <form action={clientLogin} className="mt-6 space-y-4">
+            {demo && (
+              <p className="rounded-lg border border-line bg-ink px-4 py-3 text-sm text-muted">
+                Demo deployment, sample data that resets on its own. Facility <code className="text-bone">{DEMO_SLUG}</code>, passcode{" "}
+                <code className="text-bone">{DEMO_PASSCODE}</code>.
+              </p>
+            )}
             <div>
               <label className="label" htmlFor="slug">
                 Facility name
@@ -35,7 +44,7 @@ export default async function Login({ searchParams }: { searchParams: SP }) {
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
-                defaultValue={sp.slug ?? ""}
+                defaultValue={sp.slug ?? (demo ? DEMO_SLUG : "")}
                 required
                 maxLength={40}
               />

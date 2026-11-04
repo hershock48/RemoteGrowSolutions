@@ -4,6 +4,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import type { Facility } from "./types";
 import { hashPasscode, newSalt } from "./passcode";
+import { backend } from "./store";
 
 export { hashPasscode, newSalt };
 
@@ -31,6 +32,20 @@ export { hashPasscode, newSalt };
 const ADMIN_COOKIE = "rgs_admin";
 const CLIENT_COOKIE = "rgs_client";
 const DEV_ADMIN = "rgs-dev";
+/** The consultant passcode on a demo deployment (no database attached, nothing real behind the door). */
+export const DEMO_ADMIN = "rgs-demo";
+
+/**
+ * A deployment with no database and no passcode set is a demo: it seeds the
+ * demo facility itself (lib/store.ts) and opens the consultant door on a
+ * published passcode, because nothing behind it is real and resets on its
+ * own. Attaching a database ends demo mode and the door closes until the
+ * real passcode is set. Development on the laptop is not demo mode; it has
+ * its own fallback.
+ */
+export function isDemoDeployment(): boolean {
+  return process.env.NODE_ENV === "production" && !process.env.RGS_ADMIN_PASSCODE?.trim() && backend() === "pglite-memory";
+}
 const MIN_LENGTH = 4;
 /** A working day and the evening after it. */
 const MAX_AGE = 60 * 60 * 18;
@@ -54,7 +69,8 @@ export function adminPasscode(): string | null {
     }
     return set;
   }
-  return process.env.NODE_ENV === "production" ? null : DEV_ADMIN;
+  if (process.env.NODE_ENV !== "production") return DEV_ADMIN;
+  return isDemoDeployment() ? DEMO_ADMIN : null;
 }
 
 const adminToken = (passcode: string) => sha(`rgs-admin-v1:${passcode}`);

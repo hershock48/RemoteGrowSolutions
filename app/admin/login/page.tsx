@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { adminLogin } from "@/app/actions";
-import { adminPasscode } from "@/lib/auth";
+import { adminPasscode, DEMO_ADMIN, isDemoDeployment } from "@/lib/auth";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Consultant sign in", robots: { index: false, follow: false } };
@@ -9,6 +9,7 @@ export const metadata: Metadata = { title: "Consultant sign in", robots: { index
 export default async function AdminLogin({ searchParams }: { searchParams: Promise<{ err?: string; next?: string }> }) {
   const sp = await searchParams;
   const closed = adminPasscode() === null;
+  const demo = isDemoDeployment();
   return (
     <main id="main" className="wrap flex flex-1 items-center justify-center py-16">
       <div className="card w-full max-w-sm p-7">
@@ -21,6 +22,11 @@ export default async function AdminLogin({ searchParams }: { searchParams: Promi
           </p>
         ) : (
           <form action={adminLogin} className="mt-6 space-y-4">
+            {demo && (
+              <p className="rounded-lg border border-line bg-ink px-4 py-3 text-sm text-muted">
+                Demo deployment, sample data that resets on its own. The passcode is <code className="text-bone">{DEMO_ADMIN}</code>.
+              </p>
+            )}
             <input type="hidden" name="next" value={sp.next ?? "/admin"} />
             <div>
               <label className="label" htmlFor="passcode">
