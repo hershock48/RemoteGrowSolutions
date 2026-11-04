@@ -132,9 +132,35 @@ const past = {
 };
 await pg.query(`INSERT INTO cycles (id, facility_id, room_id, status, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [past.id, past.facilityId, past.roomId, past.status, j(past)]);
 
+// Two more finished runs per room so the quarter KPIs have something to
+// average: the run before the current one, and the one before that. Yields
+// around 45 to 52 g/sq ft on 640 sq ft, with the older ones a little lower.
+const rnd = (lo, hi, d = 1) => Math.round((lo + Math.random() * (hi - lo)) * 10 ** d) / 10 ** d;
+const pastGenetics = ["Gelato 41", "Permanent Marker", "GMO", "Gelato 41"];
+for (let i = 0; i < 4; i++) {
+  for (const back of [1, 2]) {
+    const harvestedOn = addDays(flips[i], -7 - (back - 1) * 77);
+    const flipDate = addDays(harvestedOn, -(62 + (i % 2)));
+    const gps = 44 + i * 1.5 + (back === 1 ? 3 : 0) + rnd(-1.5, 1.5, 1);
+    const run = {
+      id: id("cyc"),
+      facilityId: facility.id,
+      roomId: rooms[i].id,
+      genetic: pastGenetics[(i + back) % 4],
+      flipDate,
+      plannedHarvest: addDays(flipDate, 62),
+      status: "harvested",
+      harvestedOn,
+      outcome: { dryGrams: Math.round(gps * 640), note: "" },
+      createdAt: Date.parse(`${flipDate}T12:00:00Z`),
+    };
+    if (i === 0 && back === 1) continue; // Flower 01 already has this one above.
+    await pg.query(`INSERT INTO cycles (id, facility_id, room_id, status, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [run.id, run.facilityId, run.roomId, run.status, j(run)]);
+  }
+}
+
 // Check-ins: Mon/Wed/Fri for the last three weeks, per flower room. Room 02
 // drifts high on runoff EC; Room 04 stops submitting six days ago.
-const rnd = (lo, hi, d = 1) => Math.round((lo + Math.random() * (hi - lo)) * 10 ** d) / 10 ** d;
 const events = [];
 for (let i = 0; i < 4; i++) {
   const room = rooms[i];

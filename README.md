@@ -25,11 +25,11 @@ secret). Consultant passcode in development: `rgs-dev`.
 | --- | --- | --- |
 | Public front door | `/`, `/pricing`, `/calculator` | What the subscription is, the four tiers with the estimator, the irrigation and runoff calculator, the facility requirements, and an inquiry form that lands in the consultant's inbox. |
 | Facility sign-in | `/login` | Facility name plus passcode, rate limited. |
-| Overview | `/f/{slug}` | Rooms on target, needing attention, missing check-ins; the flag list; each room's run and last reading; the week's calendar; the latest approved report; the facility's performance status. |
-| Rooms | `/f/{slug}/rooms`, `/rooms/new`, `/rooms/{id}`, `/rooms/{id}/edit` | Equipment profile (fixtures, substrate, emitters, flow rate, durations, sensors) and the room's own targets. Start and close runs; the crop clock writes the flip and planned harvest to the calendar. Trend lines and the full reading history. |
+| Overview | `/f/{slug}` | In order of weight: the rooms needing a look (one row per room, worst severity on its edge), every run as a bar from flip to planned harvest with today marked and four weeks of check-in compliance dots beside it, then the week's calendar and the latest report. A first-week progress strip until the facility has a room, a check-in, a call and an approved report. |
+| Rooms | `/f/{slug}/rooms`, `/rooms/new`, `/rooms/{id}`, `/rooms/{id}/edit`, `/compare` | Equipment profile (fixtures, substrate, emitters, flow rate, durations, sensors) and the room's own targets. Start and close runs; the crop clock writes the flip and planned harvest to the calendar. The room page's hero is feed EC against runoff EC over the run with the ceiling dashed; runoff percent, temperature and RH follow as band charts; the reading history leads with the flower day. `/compare` overlays up to four rooms' runs on one flower-day axis. |
 | Check-in | `/f/{slug}/checkin?room=` | The three-times-a-week form. Emitters and flow rate come from the room, so the grower types shot length, shots and collected runoff and sees the percentage as they type. Previous reading in every placeholder, target under every box. Photo to Vercel Blob when a store is attached. |
 | Calendar | `/f/{slug}/calendar?week=` | Seven columns, every room's flower day, every event with its owner and done state. Add, edit, mark done, remove. Who made each change and when. |
-| Reports | `/f/{slug}/reports`, `/reports/{id}`, `/reports/{id}/edit` | Drafted from the week's data by `lib/report.ts`, edited and approved by the consultant, then visible to the grower. Printable. |
+| Reports | `/f/{slug}/reports`, `/reports/{id}`, `/reports/{id}/edit` | Drafted from the week's data by `lib/report.ts`, edited and approved by the consultant, then visible to the grower. The view adds the quarter's three owner numbers (harvests, grams per square foot, days in flower, each against the prior quarter) and one feed-versus-runoff chart per room with the report's week shaded, computed when the page renders. Prints as a document: paper, ink, charts in their print palette, a running footer. |
 | Call notes | `/f/{slug}/notes`, `/notes/new` | Two versions from one call: the internal record (consultant only) and the client summary (theirs to keep). Dated action items become calendar tasks. |
 | Profile | `/f/{slug}/profile` | Facility onboarding: contact, counts, timezone, ten equipment categories. Consultant sets the performance status and can reset the passcode. |
 | Consultant | `/admin`, `/admin/facilities/new` | Every facility with its counts, inquiries with a status, and facility creation. |
@@ -40,7 +40,7 @@ secret). Consultant passcode in development: `rgs-dev`.
 | --- | --- |
 | A scheduling or forms SaaS | Plain forms posting to server actions; they work with JavaScript off. |
 | A database host | Neon on the Vercel project (free tier, part of the hosting). In development, PGlite: Postgres compiled to WebAssembly, in-process, persisted to `.data/`. Same SQL both places. |
-| A charting library | `components/Sparkline.tsx`, one SVG path. |
+| A charting library | `components/LineChart.tsx`: server-rendered SVG with axes, a target band, a dashed ceiling, up to four series and alert dots, every colour a CSS variable so the same markup prints as ink on paper. The arithmetic is `lib/chart.ts`, tested. |
 | Hosted fonts | Archivo and Inter self-hosted at build time through `next/font`. |
 | A model API for drafting reports | None, by Kevin's standing rule (no API key). `lib/report.ts` drafts from the readings in plain sentences; a model on top of that is a later layer. |
 
@@ -134,7 +134,7 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 
 ## What is not built
 
-- Sensor ingestion. Every field marked "from your sensors" is typed today.
+- Sensor ingestion. Every field marked "from your sensors" is typed today. The daily dryback sawtooth growers read on Aroya is deliberately not drawn from three readings a week; it arrives with the first sensor integration.
 - Transcription of calls. The consultant writes the note.
 - Model-drafted prose. See the rule above.
 - Billing and the subscription agreement.
@@ -171,6 +171,7 @@ both set and every gated route re-run; the record below is from that run.
 - [x] Studio credit placed, plate ground computed from `#060403` with `plate.mjs`.
 - [ ] Jake told the credit is there.
 - [x] This README.
+- [x] Charts and the print view (2026-11-04, second build day): the chart arithmetic has 18 tests across both suites; the overview, room, report, compare and consultant pages audited clean at 320, 390, 768 and 1440 on the dev server; the report rendered under print-media emulation with Playwright and looked at (`scratchpad/print-shot.mjs` pattern: `page.emulateMedia({ media: "print" })`, screenshot and PDF), which is how the sheet's own dark background was caught.
 
 ## Going live, in order
 

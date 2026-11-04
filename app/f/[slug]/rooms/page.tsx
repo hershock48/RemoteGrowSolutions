@@ -22,9 +22,14 @@ export default async function Rooms({ params }: { params: Promise<{ slug: string
           <p className="eyebrow">Rooms</p>
           <h1 className="mt-2 text-3xl sm:text-4xl">Every room, its profile and its run</h1>
         </div>
-        <Link href={`${base}/rooms/new`} className="btn-primary">
-          Add a room
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`${base}/compare`} className="btn-ghost">
+            Compare rooms
+          </Link>
+          <Link href={`${base}/rooms/new`} className="btn-primary">
+            Add a room
+          </Link>
+        </div>
       </div>
 
       <div className="mt-8 overflow-x-auto" tabIndex={0} role="region" aria-label="Rooms table, scrolls sideways on a phone">

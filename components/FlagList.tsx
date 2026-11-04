@@ -3,6 +3,7 @@ import type { Flag } from "@/lib/rules";
 import { fmtDay } from "@/lib/dates";
 
 const DOT: Record<Flag["severity"], string> = { missing: "dot-miss", attention: "dot-warn", info: "dot-info" };
+const EDGE: Record<Flag["severity"], string> = { missing: "border-l-miss", attention: "border-l-warn", info: "border-l-edge" };
 const WORD: Record<Flag["severity"], string> = { missing: "Missing", attention: "Attention", info: "Note" };
 const RANK: Record<Flag["severity"], number> = { missing: 0, attention: 1, info: 2 };
 
@@ -10,12 +11,12 @@ const RANK: Record<Flag["severity"], number> = { missing: 0, attention: 1, info:
  * One row per ROOM, not per flag. A room with three readings outside its
  * targets is one room to look at; listing it three times made the overview
  * read as three problems and buried the next room. The row carries the
- * room's worst severity and every finding under it, one line each.
+ * room's worst severity on its left edge and every finding under it.
  */
-export default function FlagList({ flags, base, empty = "Every room is inside its targets and every check-in is in." }: { flags: Flag[]; base: string; empty?: string }) {
+export default function FlagList({ flags, base, empty = "Every room is inside its targets and every check-in is in.", large = false }: { flags: Flag[]; base: string; empty?: string; large?: boolean }) {
   if (!flags.length) {
     return (
-      <p className="card flex items-center gap-3 px-5 py-4 text-[15px] text-bone/90">
+      <p className="card flex items-center gap-3 border-l-[3px] border-l-ok px-5 py-4 text-[15px] text-bone/90">
         <span className="dot dot-ok" aria-hidden="true" />
         {empty}
       </p>
@@ -32,12 +33,12 @@ export default function FlagList({ flags, base, empty = "Every room is inside it
     .sort((a, b) => RANK[a.worst] - RANK[b.worst]);
 
   return (
-    <ul className="card divide-y divide-line">
+    <ul className="space-y-2">
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-5 py-3.5">
-          <span className={`dot mt-[7px] ${DOT[row.worst]}`} aria-hidden="true" />
+        <li key={row.id} className={`card flex flex-wrap items-start gap-x-3 gap-y-1 border-l-[3px] ${EDGE[row.worst]} px-5 ${large ? "py-4" : "py-3.5"}`}>
+          <span className={`dot ${large ? "mt-[9px]" : "mt-[7px]"} ${DOT[row.worst]}`} aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <Link href={`${base}/rooms/${row.id}`} className="text-[15px] font-semibold text-bone hover:text-flare">
+            <Link href={`${base}/rooms/${row.id}`} className={`${large ? "font-display text-lg" : "text-[15px]"} font-semibold text-bone hover:text-flare`}>
               {row.name}
             </Link>
             <ul className="mt-0.5 space-y-0.5">

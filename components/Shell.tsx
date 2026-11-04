@@ -7,10 +7,16 @@ import { SITE } from "@/lib/site";
 
 /**
  * The chrome for every signed-in screen: the facility's name, the tabs, who
- * is signed in, and the storage warning when the deployment has nowhere
- * durable to write. None of the marketing header, all of its tokens.
+ * is signed in, and the storage state. None of the marketing header, all of
+ * its tokens. Nothing in it prints.
+ *
+ * Storage state is said two ways. A deployment with NO durable store gets a
+ * band on every consultant screen, because that is a real fault. The
+ * laptop's development store gets a small dot in the header with a title,
+ * because that is a fact, not a fault, and a band on every demo screen was
+ * the first thing a visitor read.
  */
-const TABS: { href: string; label: string; admin?: boolean }[] = [
+const TABS: { href: string; label: string }[] = [
   { href: "", label: "Overview" },
   { href: "/rooms", label: "Rooms" },
   { href: "/checkin", label: "Check-in" },
@@ -36,7 +42,7 @@ export default function Shell({
   const base = `/f/${facility.slug}`;
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-line bg-ink/95 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line bg-ink/95 backdrop-blur print:hidden">
         <div className="wrap flex flex-wrap items-center gap-x-6 gap-y-1 py-2">
           <Link href={viewer === "rgs" ? "/admin" : base} className="flex items-baseline gap-2 py-2 no-underline">
             <span className="font-display text-base font-bold tracking-tight text-bone">{SITE.short}</span>
@@ -48,7 +54,7 @@ export default function Shell({
               alone onto a second line. Below xl the tabs take a full row of
               their own under the brand. */}
           <nav aria-label="Facility" className="order-3 flex w-full flex-wrap gap-x-4 gap-y-0 xl:order-none xl:w-auto xl:flex-1">
-            {TABS.filter((t) => !t.admin || viewer === "rgs").map((t) => {
+            {TABS.map((t) => {
               const active = current === t.href;
               return (
                 <Link
@@ -65,6 +71,13 @@ export default function Shell({
             })}
           </nav>
           <div className="ml-auto flex items-center gap-4 text-xs text-muted">
+            {backend === "pglite-file" && viewer === "rgs" && (
+              <span className="flex items-center gap-1.5" title="Development store: an embedded Postgres in .data/ on this computer.">
+                <span className="dot dot-info" aria-hidden="true" />
+                <span className="sr-only">Development store on this computer.</span>
+                <span aria-hidden="true">dev store</span>
+              </span>
+            )}
             <span>{viewer === "rgs" ? "Consultant" : "Grower"}</span>
             <form action={logout}>
               <button type="submit" className="py-2 font-semibold hover:text-bone">
@@ -75,11 +88,10 @@ export default function Shell({
         </div>
       </header>
       <main id="main" className="wrap flex-1 py-8 sm:py-10">
-        {backend !== "postgres" && viewer === "rgs" && (
-          <p className="warn-band mb-6" role="status">
-            {backend === "pglite-memory"
-              ? "No database is attached to this deployment. Everything saved here is lost when the server restarts. Attach a Postgres database (Vercel > Storage > Neon) before a real facility uses it."
-              : "Development storage: an embedded Postgres in .data/. Fine on the laptop, not a deployment."}
+        {backend === "pglite-memory" && viewer === "rgs" && (
+          <p className="warn-band mb-6 print:hidden" role="status">
+            No database is attached to this deployment. Everything saved here is lost when the server restarts. Attach a
+            Postgres database (Vercel &gt; Storage &gt; Neon) before a real facility uses it.
           </p>
         )}
         {children}

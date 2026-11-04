@@ -2,16 +2,24 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import Shell from "@/components/Shell";
-import Sparkline from "@/components/Sparkline";
+import LineChart, { Legend } from "@/components/LineChart";
 import FlagList from "@/components/FlagList";
 import { endCycle, startCycle } from "@/app/f/actions";
 import { requireFacility } from "@/lib/load";
 import { store } from "@/lib/store";
 import { addDays, flowerDay, fmtDay, fmtWhen } from "@/lib/dates";
 import { evaluateRoom } from "@/lib/rules";
+import { ecSeries, rhSeries, runoffSeries, runReadings, tempSeries } from "@/lib/series";
 
 export const metadata: Metadata = { title: "Room" };
 
+/**
+ * One room. The hero is the picture that diagnoses a run: feed EC against
+ * runoff EC over the flower days, with the ceiling dashed. The gap between
+ * the two lines is what the consultant reads. Runoff percent, temperature
+ * and RH follow as band charts. Dates lead with the flower day, because
+ * that is the unit a grower thinks in; the clock date comes second.
+ */
 export default async function RoomPage({ params, searchParams }: { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ saved?: string; err?: string }> }) {
   const { slug, id } = await params;
   const sp = await searchParams;
@@ -20,16 +28,25 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
   if (!room || room.facilityId !== facility.id) notFound();
   const [cycle, checkins, cycles, open] = await Promise.all([
     store.activeCycle(room.id),
-    store.checkinsForRoom(room.id, 40),
+    store.checkinsForRoom(room.id, 200),
     store.cycles(facility.id),
     store.openEventsBefore(facility.id, addDays(today, 1)),
   ]);
   const flags = evaluateRoom({ room, cycle, checkins, events: open, today });
   const base = `/f/${facility.slug}`;
   const day = cycle ? flowerDay(cycle.flipDate, today) : null;
-  const series = [...checkins].reverse();
-  const past = cycles.filter((c) => c.roomId === room.id && c.status === "harvested");
+  const past = cycles.filter((c) => c.roomId === room.id && c.status === "harvested").sort((a, b) => (b.harvestedOn ?? "").localeCompare(a.harvestedOn ?? ""));
+  // Charts follow the active run; with none, the last finished one, so a
+  // room between runs still shows what happened.
+  const charted = cycle ?? past[0] ?? null;
+  const rs = charted ? runReadings(checkins, charted) : [];
+  const ec = ecSeries(rs, room);
+  const runoff = runoffSeries(rs, room);
+  const temp = tempSeries(rs, room);
+  const rh = rhSeries(rs, room);
   const t = room.targets;
+  const latest = checkins[0];
+  const latestDay = latest ? (latest.dayOfFlower ?? (cycle ? flowerDay(cycle.flipDate, latest.day) : null)) : null;
 
   return (
     <Shell facility={facility} viewer={viewer} backend={store.backend} current="/rooms">
@@ -63,9 +80,6 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
       )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        {/* min-w-0: a grid column's minimum is its content's, and the reading
-            table is 760px wide, so without this the column grows past the
-            phone and the whole page scrolls sideways (measured at 390). */}
         <div className="min-w-0 space-y-8">
           <section>
             <h2 className="text-xl text-bone">Right now</h2>
@@ -74,34 +88,36 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
             </div>
           </section>
 
-          <section>
-            <h2 className="text-xl text-bone">Trend</h2>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <div className="card p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Runoff %</p>
-                <div className="mt-2">
-                  <Sparkline values={series.map((c) => c.runoffPct)} band={t.runoffPct} label="Runoff percentage" />
-                </div>
-              </div>
-              <div className="card p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Runoff EC</p>
-                <div className="mt-2">
-                  <Sparkline values={series.map((c) => c.runoffEc)} ceiling={t.runoffEcMax} label="Runoff EC" />
-                </div>
-              </div>
-              <div className="card p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Temperature °F</p>
-                <div className="mt-2">
-                  <Sparkline values={series.map((c) => c.tempF)} band={t.tempF} label="Temperature" />
-                </div>
-              </div>
-              <div className="card p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">RH %</p>
-                <div className="mt-2">
-                  <Sparkline values={series.map((c) => c.rh)} band={t.rh} label="Relative humidity" />
-                </div>
-              </div>
+          <section className="card p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="text-xl text-bone">
+                Feed against runoff EC
+                {charted && <span className="ml-2 text-sm font-normal text-muted">{charted.genetic || "run"}, flipped {fmtDay(charted.flipDate)}{charted.status === "harvested" ? ", last run" : ""}</span>}
+              </h2>
+              <Legend series={ec} />
             </div>
+            <p className="mt-1 text-sm text-muted">The gap between the lines is the story. Runoff climbing while feed holds is salt building in the substrate.</p>
+            <div className="mt-4">
+              <LineChart series={ec} yLabel="mS/cm" marker={day ?? undefined} ariaLabel={`Feed and runoff EC for ${room.name} by flower day`} />
+            </div>
+          </section>
+
+          {/* Two across on a laptop, three only on a wide screen: three in the
+              narrow column scaled the axis labels below legibility. */}
+          <section className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {[
+              { title: "Runoff %", target: `${t.runoffPct[0]} to ${t.runoffPct[1]}`, series: runoff, label: `Runoff percentage for ${room.name}` },
+              { title: "Temperature °F", target: `${t.tempF[0]} to ${t.tempF[1]}`, series: temp, label: `Temperature for ${room.name}` },
+              { title: "RH %", target: `${t.rh[0]} to ${t.rh[1]}`, series: rh, label: `Relative humidity for ${room.name}` },
+            ].map((c) => (
+              <div key={c.title} className="card p-4">
+                <h3 className="text-sm font-semibold text-bone">{c.title}</h3>
+                <p className="text-xs text-muted">Target {c.target}</p>
+                <div className="mt-2">
+                  <LineChart series={c.series} width={400} height={220} ariaLabel={c.label} />
+                </div>
+              </div>
+            ))}
           </section>
 
           <section>
@@ -110,8 +126,8 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
               <table className="tbl min-w-[760px]">
                 <thead>
                   <tr>
-                    <th scope="col">Day</th>
                     <th scope="col">Flower day</th>
+                    <th scope="col">Date</th>
                     <th scope="col">Temp</th>
                     <th scope="col">RH</th>
                     <th scope="col">Feed EC/pH</th>
@@ -128,10 +144,10 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
                       </td>
                     </tr>
                   )}
-                  {checkins.map((c) => (
+                  {checkins.slice(0, 40).map((c) => (
                     <tr key={c.id}>
-                      <td className="whitespace-nowrap">{fmtDay(c.day)}</td>
-                      <td className="text-muted">{c.dayOfFlower ?? ""}</td>
+                      <td className="font-semibold">{c.dayOfFlower !== undefined ? `Day ${c.dayOfFlower}` : ""}</td>
+                      <td className="whitespace-nowrap text-muted">{fmtDay(c.day)}</td>
                       <td>{c.tempF ?? ""}</td>
                       <td>{c.rh ?? ""}</td>
                       <td>{[c.feedEc, c.feedPh].filter((v) => v !== undefined).join(" / ")}</td>
@@ -180,6 +196,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
                         Dry weight, grams (optional)
                       </label>
                       <input id="dryGrams" name="dryGrams" type="number" inputMode="decimal" min={0} className="field" />
+                      <span className="hint">Feeds the quarter&apos;s grams per square foot on the report.</span>
                     </div>
                     <div>
                       <label className="label" htmlFor="cnote">
@@ -268,7 +285,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
                 {past.map((c) => (
                   <li key={c.id} className="text-muted">
                     <span className="text-bone">{c.genetic || "Run"}</span>, {fmtDay(c.flipDate)} to {c.harvestedOn ? fmtDay(c.harvestedOn) : "?"}
-                    {c.outcome?.dryGrams ? `, ${c.outcome.dryGrams} g dry` : ""}
+                    {c.outcome?.dryGrams && room.canopySqft ? `, ${(c.outcome.dryGrams / room.canopySqft).toFixed(1)} g/sq ft` : c.outcome?.dryGrams ? `, ${c.outcome.dryGrams} g dry` : ""}
                     {c.outcome?.note ? `. ${c.outcome.note}` : ""}
                   </li>
                 ))}
@@ -277,7 +294,9 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
           )}
 
           <p className="text-xs text-muted">
-            {checkins.length ? `Last check-in ${fmtWhen(checkins[0].at, facility.timezone)} by the ${checkins[0].submittedBy === "rgs" ? "consultant" : "grower"}.` : ""}
+            {latest
+              ? `Last check-in ${latestDay ? `day ${latestDay}` : fmtDay(latest.day)} (${fmtWhen(latest.at, facility.timezone)}) by the ${latest.submittedBy === "rgs" ? "consultant" : "grower"}.`
+              : ""}
           </p>
         </aside>
       </div>

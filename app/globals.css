@@ -232,3 +232,60 @@ textarea.field {
   .gw-plate-drip { height: 34px; }
   .gw-plate-bar { justify-content: center; padding: 0 16px 16px; }
 }
+
+/* ── Charts ──
+   Every colour a chart draws is one of these, so the SVG can be ink on
+   paper at print time without re-rendering. Values are the tailwind tokens
+   by hand, since an SVG attribute cannot read a Tailwind class. */
+.chart {
+  --chart-bg: #151010;
+  --chart-grid: #332621;
+  --chart-axis: #A89C90;
+  --chart-primary: #F7F3EC;
+  --chart-secondary: #F5A83C;
+  --chart-third: #8FD17A;
+  --chart-fourth: #F0722C;
+  --chart-alert: #FF9E8C;
+  --chart-band: rgba(143, 209, 122, 0.14);
+  --chart-band-solid: rgba(143, 209, 122, 0.35);
+  --chart-shade: rgba(245, 168, 60, 0.10);
+}
+@media print {
+  .chart {
+    --chart-bg: #ffffff;
+    --chart-grid: #e5ded2;
+    --chart-axis: #7f6d5b;
+    --chart-primary: #2b1e16;
+    --chart-secondary: #d95e27;
+    --chart-third: #467c3d;
+    --chart-fourth: #c9356f;
+    --chart-alert: #b3261e;
+    --chart-band: rgba(70, 124, 61, 0.14);
+    --chart-band-solid: rgba(70, 124, 61, 0.4);
+    --chart-shade: rgba(217, 94, 39, 0.10);
+  }
+}
+
+/* ── The printed report ──
+   White paper, dark ink, the chrome gone, charts in their print palette, and
+   a running footer on every sheet. Chrome has no @page margin boxes, so the
+   footer is a fixed element, which prints on each page. */
+@media print {
+  @page { margin: 16mm 14mm 20mm; }
+  html, body { background: #fff !important; color: #2b1e16 !important; }
+  body { background-image: none !important; }
+  .print-sheet { color: #2b1e16; }
+  .print-sheet .text-bone, .print-sheet .text-bone\/90, .print-sheet h1, .print-sheet h2, .print-sheet h3 { color: #2b1e16 !important; }
+  .print-sheet .text-muted { color: #5c4d40 !important; }
+  /* The sheet itself carries .card, so it is named here as well as its descendants. */
+  .print-sheet, .print-sheet .card, .print-sheet .bg-ink-panel, .print-sheet .bg-ink { background: #fff !important; border-color: #e5ded2 !important; }
+  .print-sheet .border-line { border-color: #e5ded2 !important; }
+  .print-sheet .eyebrow { color: #c9356f !important; }
+  .print-sheet .pill { border-color: #e5ded2 !important; color: #5c4d40 !important; background: #fff !important; }
+  .print-sheet .dot-warn { background: #d95e27 !important; }
+  .print-sheet .tbl th { color: #5c4d40 !important; border-color: #e5ded2 !important; }
+  .print-sheet .tbl td { color: #2b1e16 !important; border-color: #e5ded2 !important; }
+  .print-footer { display: block; position: fixed; bottom: 0; left: 0; right: 0; font-size: 10px; color: #7f6d5b; border-top: 1px solid #e5ded2; padding-top: 4px; }
+  .print-break { break-inside: avoid; }
+}
+.print-footer { display: none; }
