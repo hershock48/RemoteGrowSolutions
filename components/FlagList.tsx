@@ -4,7 +4,14 @@ import { fmtDay } from "@/lib/dates";
 
 const DOT: Record<Flag["severity"], string> = { missing: "dot-miss", attention: "dot-warn", info: "dot-info" };
 const WORD: Record<Flag["severity"], string> = { missing: "Missing", attention: "Attention", info: "Note" };
+const RANK: Record<Flag["severity"], number> = { missing: 0, attention: 1, info: 2 };
 
+/**
+ * One row per ROOM, not per flag. A room with three readings outside its
+ * targets is one room to look at; listing it three times made the overview
+ * read as three problems and buried the next room. The row carries the
+ * room's worst severity and every finding under it, one line each.
+ */
 export default function FlagList({ flags, base, empty = "Every room is inside its targets and every check-in is in." }: { flags: Flag[]; base: string; empty?: string }) {
   if (!flags.length) {
     return (
@@ -14,23 +21,35 @@ export default function FlagList({ flags, base, empty = "Every room is inside it
       </p>
     );
   }
+  const rooms = new Map<string, { name: string; items: Flag[] }>();
+  for (const f of flags) {
+    const r = rooms.get(f.roomId) ?? { name: f.roomName, items: [] };
+    r.items.push(f);
+    rooms.set(f.roomId, r);
+  }
+  const rows = [...rooms.entries()]
+    .map(([id, r]) => ({ id, name: r.name, items: r.items.sort((a, b) => RANK[a.severity] - RANK[b.severity]), worst: r.items.reduce((w, f) => (RANK[f.severity] < RANK[w] ? f.severity : w), r.items[0].severity) }))
+    .sort((a, b) => RANK[a.worst] - RANK[b.worst]);
+
   return (
     <ul className="card divide-y divide-line">
-      {flags.map((f, i) => (
-        <li key={`${f.roomId}-${f.code}-${i}`} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-5 py-3.5">
-          <span className={`dot mt-[7px] ${DOT[f.severity]}`} aria-hidden="true" />
+      {rows.map((row) => (
+        <li key={row.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-5 py-3.5">
+          <span className={`dot mt-[7px] ${DOT[row.worst]}`} aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] text-bone">
-              <Link href={`${base}/rooms/${f.roomId}`} className="font-semibold hover:text-flare">
-                {f.roomName}
-              </Link>{" "}
-              <span className="text-muted">{f.text}</span>
-            </p>
+            <Link href={`${base}/rooms/${row.id}`} className="text-[15px] font-semibold text-bone hover:text-flare">
+              {row.name}
+            </Link>
+            <ul className="mt-0.5 space-y-0.5">
+              {row.items.map((f, i) => (
+                <li key={`${f.code}-${i}`} className="text-[15px] text-muted">
+                  {f.text}
+                  {f.day && f.severity !== "attention" ? <span className="text-muted/80"> · {fmtDay(f.day)}</span> : null}
+                </li>
+              ))}
+            </ul>
           </div>
-          <span className="pill">
-            {WORD[f.severity]}
-            {f.day ? ` · ${fmtDay(f.day)}` : ""}
-          </span>
+          <span className="pill">{WORD[row.worst]}</span>
         </li>
       ))}
     </ul>

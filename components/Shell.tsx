@@ -42,7 +42,12 @@ export default function Shell({
             <span className="font-display text-base font-bold tracking-tight text-bone">{SITE.short}</span>
             <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">{facility.name}</span>
           </Link>
-          <nav aria-label="Facility" className="order-3 flex w-full flex-wrap gap-x-4 gap-y-0 sm:order-none sm:w-auto sm:flex-1">
+          {/* Seven tabs need about 600px, the brand with a facility name about
+              250, the sign-out corner 120. That is more than a 1024px laptop
+              window holds beside each other, measured: the last tab wrapped
+              alone onto a second line. Below xl the tabs take a full row of
+              their own under the brand. */}
+          <nav aria-label="Facility" className="order-3 flex w-full flex-wrap gap-x-4 gap-y-0 xl:order-none xl:w-auto xl:flex-1">
             {TABS.filter((t) => !t.admin || viewer === "rgs").map((t) => {
               const active = current === t.href;
               return (

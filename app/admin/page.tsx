@@ -63,7 +63,7 @@ export default async function Admin() {
           </Link>
         </div>
 
-        <ul className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <ul className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {boards.length === 0 && (
             <li className="card p-6 text-sm text-muted">
               No facilities yet. Create the first one, give the grower its name and passcode by phone, and have them fill
@@ -81,8 +81,11 @@ export default async function Admin() {
                       {f.name}
                     </Link>
                     <p className="text-xs text-muted">
-                      {f.flowerRooms} flower rooms · {f.lightsTotal} lights · {q.tier.name} {usd(q.tier.monthly)}
-                      {q.tier.open ? "+" : ""}
+                      {f.flowerRooms} flower rooms · {f.lightsTotal} lights
+                    </p>
+                    <p className="text-xs text-muted">
+                      {q.tier.name}, {usd(q.tier.monthly)}
+                      {q.tier.open ? "+" : ""} a month
                     </p>
                   </div>
                   <span className={`dot mt-2 ${d.summary.missing ? "dot-miss" : d.summary.flagged ? "dot-warn" : "dot-ok"}`} aria-hidden="true" />

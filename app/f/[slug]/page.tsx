@@ -78,9 +78,16 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
                       <Link href={`${base}/rooms/${r.id}`} className="font-display text-lg font-bold text-bone hover:text-flare">
                         {r.name}
                       </Link>
-                      <p className="text-xs uppercase tracking-[0.12em] text-muted">
-                        {r.kind}
-                        {cycle ? ` · ${cycle.genetic || "run"} · day ${day ?? 0} of ${r.flowerDays}` : r.kind === "flower" ? " · no active run" : ""}
+                      <p className="mt-0.5 text-[13px] text-muted">
+                        {cycle ? (
+                          <>
+                            {cycle.genetic || "Current run"}, <span className="whitespace-nowrap">day {day ?? 0} of {r.flowerDays}</span>
+                          </>
+                        ) : r.kind === "flower" ? (
+                          "No active run"
+                        ) : (
+                          r.kind === "mom" ? "Mother room" : r.kind === "veg" ? "Veg room" : "Clone room"
+                        )}
                       </p>
                     </div>
                     <span className={`dot mt-2 ${dot}`} aria-hidden="true" />
