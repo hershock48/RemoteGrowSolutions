@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Shell from "@/components/Shell";
 import LineChart, { Legend } from "@/components/LineChart";
 import FlagList from "@/components/FlagList";
+import EntryLog from "@/components/EntryLog";
 import { endCycle, startCycle } from "@/app/f/actions";
 import { requireFacility } from "@/lib/load";
 import { store } from "@/lib/store";
@@ -120,51 +121,13 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
             ))}
           </section>
 
-          <section>
-            <h2 className="text-xl text-bone">Check-ins</h2>
-            <div className="mt-3 overflow-x-auto" tabIndex={0} role="region" aria-label="Check-in history, scrolls sideways on a phone">
-              <table className="tbl min-w-[760px]">
-                <thead>
-                  <tr>
-                    <th scope="col">Flower day</th>
-                    <th scope="col">Date</th>
-                    <th scope="col">Temp</th>
-                    <th scope="col">RH</th>
-                    <th scope="col">Feed EC/pH</th>
-                    <th scope="col">Runoff EC/pH</th>
-                    <th scope="col">Runoff</th>
-                    <th scope="col">Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {checkins.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="text-muted">
-                        None yet.
-                      </td>
-                    </tr>
-                  )}
-                  {checkins.slice(0, 40).map((c) => (
-                    <tr key={c.id}>
-                      <td className="font-semibold">{c.dayOfFlower !== undefined ? `Day ${c.dayOfFlower}` : ""}</td>
-                      <td className="whitespace-nowrap text-muted">{fmtDay(c.day)}</td>
-                      <td>{c.tempF ?? ""}</td>
-                      <td>{c.rh ?? ""}</td>
-                      <td>{[c.feedEc, c.feedPh].filter((v) => v !== undefined).join(" / ")}</td>
-                      <td>{[c.runoffEc, c.runoffPh].filter((v) => v !== undefined).join(" / ")}</td>
-                      <td>{c.runoffPct !== undefined ? `${c.runoffPct.toFixed(1)}%` : c.runoffMl !== undefined ? `${c.runoffMl} mL` : ""}</td>
-                      <td className="max-w-[260px] text-muted">
-                        {c.observations}
-                        {c.photoUrl && (
-                          <a href={c.photoUrl} target="_blank" rel="noopener" className="ml-1 text-flare hover:underline">
-                            photo
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <section id="entries" className="scroll-mt-24">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-xl text-bone">What the grower entered, by date</h2>
+              <span className="text-xs text-muted">Newest first. Day, environment, lights, irrigation, runoff, substrate, and what they saw.</span>
+            </div>
+            <div className="mt-3">
+              <EntryLog checkins={checkins} timezone={facility.timezone} />
             </div>
           </section>
         </div>

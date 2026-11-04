@@ -38,17 +38,16 @@ export default async function Rooms({ params }: { params: Promise<{ slug: string
             <tr>
               <th scope="col">Room</th>
               <th scope="col">Kind</th>
-              <th scope="col">Run</th>
+              <th scope="col">Day</th>
               <th scope="col">Lights</th>
-              <th scope="col">Last check-in</th>
-              <th scope="col">Runoff</th>
+              <th scope="col">Last entry</th>
               <th scope="col"></th>
             </tr>
           </thead>
           <tbody>
             {d.rooms.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-muted">
+                <td colSpan={6} className="text-muted">
                   No rooms yet.
                 </td>
               </tr>
@@ -64,11 +63,13 @@ export default async function Rooms({ params }: { params: Promise<{ slug: string
                     </Link>
                   </td>
                   <td className="capitalize text-muted">{r.kind}</td>
-                  <td className="text-muted">{c ? `${c.genetic || "run"}, day ${flowerDay(c.flipDate, today) ?? 0}` : r.kind === "flower" ? "none" : ""}</td>
+                  <td className="text-muted">{c ? `Day ${flowerDay(c.flipDate, today) ?? 0} of ${r.flowerDays}` : r.kind === "flower" ? "No active run" : ""}</td>
                   <td className="text-muted">{r.fixtureCount || ""}</td>
                   <td className="text-muted">{latest ? fmtWhen(latest.at, facility.timezone) : "never"}</td>
-                  <td className="text-muted">{latest?.runoffPct !== undefined ? `${latest.runoffPct.toFixed(1)}%` : ""}</td>
                   <td className="text-right">
+                    <Link href={`${base}/rooms/${r.id}`} className="btn-small mr-2">
+                      Open
+                    </Link>
                     <Link href={`${base}/checkin?room=${r.id}`} className="btn-small">
                       Check in
                     </Link>

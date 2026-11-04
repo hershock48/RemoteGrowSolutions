@@ -60,6 +60,19 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
             <span className="font-semibold text-bone">{ready.name}.</span>
             <span>{facility.readinessNote || ready.body}</span>
           </p>
+          <p className="mt-1 text-xs text-muted">
+            Genetics by room live on each room&apos;s page; current runs:{" "}
+            {flower.filter((r) => d.activeCycle.has(r.id)).map((r, i) => (
+              <span key={r.id}>
+                {i > 0 ? ", " : ""}
+                <Link href={`${base}/rooms/${r.id}`} className="text-bone hover:text-flare">
+                  {r.name}
+                </Link>{" "}
+                {d.activeCycle.get(r.id)!.genetic || "unnamed"}
+              </span>
+            ))}
+            {flower.every((r) => !d.activeCycle.has(r.id)) ? "none" : ""}.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href={`${base}/checkin`} className="btn-primary">
@@ -71,12 +84,69 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
         </div>
       </div>
 
-      <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-        <Stat label="Flower rooms" value={d.summary.rooms} />
-        <Stat label="On target" value={d.summary.onTarget} tone="text-ok" />
-        <Stat label="Need attention" value={d.summary.flagged} tone={d.summary.flagged ? "text-warn" : undefined} />
-        <Stat label="Missing check-ins" value={d.summary.missing} tone={d.summary.missing ? "text-miss" : undefined} />
-      </dl>
+      {/* ── The facility, first, on both sides ── */}
+      <section className="card mt-6 grid gap-x-8 gap-y-4 p-5 sm:p-6 md:grid-cols-[1.2fr_1fr]" aria-label="Facility profile">
+        <div>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="eyebrow">Facility profile</p>
+            <Link href={`${base}/profile`} className="text-xs font-semibold text-flare hover:underline">
+              Edit the profile
+            </Link>
+          </div>
+          <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-muted">Contact</dt>
+            <dd className="text-bone">{[facility.contact, facility.phone, facility.email].filter(Boolean).join(" · ") || "Not filled in yet"}</dd>
+            <dt className="text-muted">Where</dt>
+            <dd className="text-bone">{facility.state || "Not filled in yet"}</dd>
+            <dt className="text-muted">Rooms</dt>
+            <dd className="text-bone">
+              {facility.flowerRooms} flower{facility.vegRooms ? `, ${facility.vegRooms} veg` : ""}{facility.momRooms ? `, ${facility.momRooms} mother` : ""}
+            </dd>
+            <dt className="text-muted">Lights</dt>
+            <dd className="text-bone">
+              {facility.lightsTotal} flowering{facility.canopySqft ? ` over ${facility.canopySqft.toLocaleString("en-US")} sq ft` : ""}
+            </dd>
+            <dt className="text-muted">Sensors</dt>
+            <dd className="text-bone">{facility.equipment.sensors || "Not filled in yet"}</dd>
+          </dl>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 self-start text-sm">
+          <Stat label="Flower rooms" value={d.summary.rooms} />
+          <Stat label="On target" value={d.summary.onTarget} tone="text-ok" />
+          <Stat label="Need attention" value={d.summary.flagged} tone={d.summary.flagged ? "text-warn" : undefined} />
+          <Stat label="Missing check-ins" value={d.summary.missing} tone={d.summary.missing ? "text-miss" : undefined} />
+        </dl>
+      </section>
+
+      {/* ── What is due: the grower's reason to open this page ── */}
+      {flower.some((r) => d.activeCycle.has(r.id)) && (
+        <section className={`mt-6 ${viewer === "client" ? "" : ""}`} aria-label="Check-ins due this week">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className={viewer === "client" ? "text-2xl text-bone" : "text-lg text-bone"}>Check-ins due this week</h2>
+            <span className="text-xs text-muted">{EXPECTED_PER_WEEK} a week per flower room, Monday to Sunday.</span>
+          </div>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {flower
+              .filter((r) => d.activeCycle.has(r.id))
+              .map((r) => {
+                const wk = compliance(recent4.filter((c) => c.roomId === r.id), today);
+                const done = wk[wk.length - 1]?.count ?? 0;
+                const left = Math.max(0, EXPECTED_PER_WEEK - done);
+                return (
+                  <li key={r.id} className={`card flex items-center justify-between gap-3 border-l-[3px] px-4 py-3 ${left === 0 ? "border-l-ok" : "border-l-warn"}`}>
+                    <div>
+                      <p className="font-semibold text-bone">{r.name}</p>
+                      <p className="text-xs text-muted">{left === 0 ? "Done for the week" : `${done} of ${EXPECTED_PER_WEEK} in, ${left} to go`}</p>
+                    </div>
+                    <Link href={`${base}/checkin?room=${r.id}`} className={left === 0 ? "btn-small" : "btn-primary !min-h-[36px] !px-4 !py-1.5 text-xs"}>
+                      {left === 0 ? "Add another" : "Check in"}
+                    </Link>
+                  </li>
+                );
+              })}
+          </ul>
+        </section>
+      )}
 
       {onboarding && (
         <ol className="card mt-6 grid gap-px overflow-hidden bg-line sm:grid-cols-4">
@@ -247,9 +317,9 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: string }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <dd className={`font-display text-2xl font-bold ${tone ?? "text-bone"}`}>{value}</dd>
+    <div>
       <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</dt>
+      <dd className={`font-display text-2xl font-bold ${tone ?? "text-bone"}`}>{value}</dd>
     </div>
   );
 }
