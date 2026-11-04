@@ -164,18 +164,40 @@ export function evaluateRoom({ room, cycle, checkins, events, today }: RoomInput
     }
   }
 
-  // Overdue tasks on this room.
-  const overdue = events.filter((e) => e.roomId === room.id && !e.doneAt && diffDays(e.date, today) > 0);
+  // A planned harvest that has passed with the run still open is its own note,
+  // not an overdue task: the date was a plan, and the fix is to close the run
+  // or move the date.
+  if (active && cycle) {
+    const harvestOn = cycle.plannedHarvest ?? addDays(cycle.flipDate, room.flowerDays - 1);
+    const past = diffDays(harvestOn, today);
+    if (past > 0) {
+      flags.push({
+        ...base,
+        severity: "info",
+        code: "harvest-passed",
+        text: `Planned harvest was ${past} day${past === 1 ? "" : "s"} ago and the run is still open. Close it or move the date.`,
+        day: harvestOn,
+      });
+    }
+  }
+
+  // Overdue tasks on this room. Flips and harvests are milestones the crop
+  // clock writes, not work somebody forgot, so they never count here.
+  const overdue = events
+    .filter((e) => e.roomId === room.id && !e.doneAt && e.kind !== "flip" && e.kind !== "harvest" && diffDays(e.date, today) > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (overdue.length) {
+    const oldest = overdue[0];
+    const ago = diffDays(oldest.date, today);
     flags.push({
       ...base,
       severity: "attention",
       code: "overdue",
       text:
         overdue.length === 1
-          ? `"${overdue[0].title}" was due ${diffDays(overdue[0].date, today)} day${diffDays(overdue[0].date, today) === 1 ? "" : "s"} ago.`
-          : `${overdue.length} tasks are past due, the oldest "${overdue[overdue.length - 1].title}".`,
-      day: overdue[0].date,
+          ? `"${oldest.title}" was due ${ago} day${ago === 1 ? "" : "s"} ago.`
+          : `${overdue.length} tasks are past due, the oldest "${oldest.title}" by ${ago} day${ago === 1 ? "" : "s"}.`,
+      day: oldest.date,
     });
   }
 

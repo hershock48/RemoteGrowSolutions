@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { hashPasscode, isAdmin, newSalt, PASSCODE_MIN, viewerFor, type Viewer } from "@/lib/auth";
 import { addDays, isISODate, todayIn, weekStart } from "@/lib/dates";
-import { int, num, q, SLUG, slugify, str } from "@/lib/forms";
+import { int, num, q, safePath, SLUG, slugify, str } from "@/lib/forms";
 import { irrigation } from "@/lib/irrigation";
 import { loadDashboard } from "@/lib/load";
 import { draftReport } from "@/lib/report";
@@ -150,7 +150,8 @@ export async function startCycle(fd: FormData): Promise<void> {
     createdBy: who,
     createdAt: Date.now(),
   });
-  await store.saveEvent(mk(flipDate, `${room.name} flipped`, "flip"));
+  // The flip has happened by the time it is recorded, so it is born done.
+  await store.saveEvent({ ...mk(flipDate, `${room.name} flipped`, "flip"), doneAt: Date.now(), doneBy: who });
   await store.saveEvent(mk(cycle.plannedHarvest!, `${room.name} planned harvest`, "harvest"));
   revalidatePath(base, "layout");
   redirect(`${base}/rooms/${room.id}${q({ saved: "1" })}`);
@@ -167,6 +168,17 @@ export async function endCycle(fd: FormData): Promise<void> {
   const dry = num(fd, "dryGrams");
   cycle.outcome = { dryGrams: dry !== undefined && !bad(dry) ? dry : undefined, note: str(fd, "note", 1000) };
   await store.saveCycle(cycle);
+  // The run's planned-harvest milestone is done now, on the day it was done.
+  const who = (await isAdmin()) ? "rgs" : "client";
+  for (const e of await store.eventsBetween(facility.id, addDays(cycle.flipDate, -1), addDays(cycle.harvestedOn, 400))) {
+    if (e.cycleId === cycle.id && e.kind === "harvest" && !e.doneAt) {
+      e.date = cycle.harvestedOn;
+      e.doneAt = Date.now();
+      e.doneBy = who;
+      e.updatedAt = Date.now();
+      await store.saveEvent(e);
+    }
+  }
   revalidatePath(base, "layout");
   redirect(`${base}/rooms/${cycle.roomId}${q({ saved: "1" })}`);
 }
@@ -181,7 +193,8 @@ export async function saveCheckin(fd: FormData): Promise<void> {
   const back = `${base}/checkin?room=${room.id}`;
 
   const day = str(fd, "day", 10) || today;
-  if (!isISODate(day)) redirect(`${back}&err=date`);
+  // A reading cannot belong to a day that has not happened in the facility's timezone.
+  if (!isISODate(day) || day > today) redirect(`${back}&err=date`);
   const fields = ["tempF", "rh", "ppfd", "co2", "feedEc", "feedPh", "runoffEc", "runoffPh", "runoffMl", "shotMin", "shotsPerDay", "substrateWc", "substrateEc", "dryback"] as const;
   const values: Partial<Record<(typeof fields)[number], number>> = {};
   for (const f of fields) {
@@ -219,13 +232,17 @@ export async function saveCheckin(fd: FormData): Promise<void> {
   // no token the check-in saves without it and the form says so beforehand.
   const photo = fd.get("photo");
   if (photo instanceof File && photo.size > 0 && process.env.BLOB_READ_WRITE_TOKEN) {
-    if (photo.size > 8 * 1024 * 1024) redirect(`${back}&err=photo`);
+    // Only an image, served as the image type WE name, at a URL nobody can
+    // guess from the ids: a public blob host must never serve an uploaded
+    // file with a content type the browser supplied.
+    const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic" };
+    const ext = IMAGE_TYPES[photo.type];
+    if (!ext || photo.size > 8 * 1024 * 1024) redirect(`${back}&err=photo`);
     const { put } = await import("@vercel/blob");
-    const ext = photo.type === "image/png" ? "png" : photo.type === "image/webp" ? "webp" : "jpg";
     const blob = await put(`${facility.slug}/${room.id}/${day}-${checkin.id}.${ext}`, photo, {
       access: "public",
-      contentType: photo.type || "image/jpeg",
-      addRandomSuffix: false,
+      contentType: photo.type,
+      addRandomSuffix: true,
     });
     checkin.photoUrl = blob.url;
   }
@@ -292,7 +309,7 @@ export async function toggleEvent(fd: FormData): Promise<void> {
   e.updatedAt = Date.now();
   await store.saveEvent(e);
   revalidatePath(base, "layout");
-  redirect(str(fd, "back", 200).startsWith("/") ? str(fd, "back", 200) : back);
+  redirect(safePath(str(fd, "back", 200), back));
 }
 
 export async function deleteEvent(fd: FormData): Promise<void> {
@@ -497,6 +514,12 @@ export async function createFacility(fd: FormData): Promise<void> {
   if (!SLUG.test(slug)) redirect(`${back}${q({ err: "slug" })}`);
   if (passcode.length < PASSCODE_MIN) redirect(`${back}${q({ err: "passcode" })}`);
   if (await store.facilityBySlug(slug)) redirect(`${back}${q({ err: "taken" })}`);
+  const tz = str(fd, "timezone", 60) || SITE.timezone;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+  } catch {
+    redirect(`${back}${q({ err: "timezone" })}`);
+  }
   const salt = newSalt();
   const f: Facility = {
     id: newId("fac"),
@@ -506,7 +529,7 @@ export async function createFacility(fd: FormData): Promise<void> {
     email: str(fd, "email", 200),
     phone: str(fd, "phone", 40),
     state: str(fd, "state", 60) || "Michigan",
-    timezone: str(fd, "timezone", 60) || SITE.timezone,
+    timezone: tz,
     flowerRooms: int(fd, "flowerRooms") || 0,
     lightsTotal: int(fd, "lightsTotal") || 0,
     canopySqft: 0,

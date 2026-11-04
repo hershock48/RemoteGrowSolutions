@@ -198,6 +198,7 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
                   </label>
                   <input id="iq-phone" name="phone" type="tel" className="field" autoComplete="tel" maxLength={40} />
                   {sp.err === "contact" && <span className="error">One of email or phone, so we can answer.</span>}
+                  {sp.err === "slow" && <span className="error">That is a lot of messages from one place. Try again in an hour.</span>}
                 </div>
                 <div>
                   <label className="label" htmlFor="iq-lights">

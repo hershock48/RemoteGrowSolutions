@@ -57,7 +57,7 @@ export default async function Overview({ params }: { params: Promise<{ slug: str
       )}
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1.3fr_1fr]">
-        <section>
+        <section className="min-w-0">
           <h2 className="text-xl text-bone">Rooms needing a look</h2>
           <div className="mt-4">
             <FlagList flags={d.flags} base={base} />

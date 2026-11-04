@@ -36,6 +36,10 @@ export const SLUG = /^[a-z0-9][a-z0-9-]{1,39}$/;
 export type Errors = Record<string, string>;
 
 /** Query-string messages the screens render, so every form works without JavaScript. */
+/** A redirect target we will honor: a path on this site, never a protocol-relative URL. */
+export const safePath = (s: string, fallback: string): string =>
+  s.startsWith("/") && !s.startsWith("//") && !s.startsWith("/\\") ? s : fallback;
+
 export function q(params: Record<string, string | undefined>): string {
   const s = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) if (v) s.set(k, v);

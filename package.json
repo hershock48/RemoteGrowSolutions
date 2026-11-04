@@ -11,6 +11,7 @@
     "seed": "node --import ./lib/__tests__/resolve-ts.mjs scripts/seed.mjs"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.0",
     "@vercel/blob": "^2.8.0",
     "next": "^16.3.4",
     "pg": "^8.23.0",
@@ -18,7 +19,6 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.3.0",
     "@types/node": "^22",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",

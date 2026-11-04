@@ -120,6 +120,40 @@ test("rules: drift is info only when the latest reading is still inside the targ
   assert.equal(flags[0].severity, "info");
 });
 
+test("rules: overdue names the oldest task, and milestones never count as overdue", () => {
+  const ev = (id: string, date: string, title: string, kind: "task" | "flip" | "harvest") => ({
+    id,
+    facilityId: "f1",
+    roomId: "r1",
+    date,
+    title,
+    kind,
+    owner: "client" as const,
+    source: "manual" as const,
+    createdBy: "rgs" as const,
+    createdAt: 0,
+  });
+  const flags = evaluateRoom({
+    room,
+    cycle,
+    today: "2026-11-05",
+    checkins: [ci("2026-11-05", { runoffPct: 12 })],
+    events: [ev("a", "2026-11-03", "Newer task", "task"), ev("b", "2026-11-01", "Older task", "task"), ev("c", "2026-10-08", "Flower 01 flipped", "flip")],
+  });
+  const over = flags.find((f) => f.code === "overdue")!;
+  assert.equal(over.text, '2 tasks are past due, the oldest "Older task" by 4 days.');
+  assert.equal(over.day, "2026-11-01");
+});
+
+test("rules: a planned harvest that has passed with the run open is a note, not a task", () => {
+  const late: Cycle = { ...cycle, flipDate: "2026-08-01" }; // day 63 on 2026-10-02
+  const flags = evaluateRoom({ room, cycle: late, today: "2026-10-05", checkins: [ci("2026-10-05", { runoffPct: 12 })], events: [] });
+  const f = flags.find((x) => x.code === "harvest-passed")!;
+  assert.equal(f.severity, "info");
+  assert.match(f.text, /was 3 days ago and the run is still open/);
+  assert.ok(!flags.some((x) => x.code === "overdue"));
+});
+
 test("rules: harvest inside the lookahead is info", () => {
   const near: Cycle = { ...cycle, flipDate: "2026-09-05" }; // day 63 on 2026-11-06
   const flags = evaluateRoom({ room, cycle: near, today: "2026-11-04", checkins: [ci("2026-11-04", { runoffPct: 12 })], events: [] });

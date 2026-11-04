@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { adminMatches, clearCookies, facilityMatches, setAdminCookie, setClientCookie } from "@/lib/auth";
-import { emailLooksReal, q, str } from "@/lib/forms";
+import { emailLooksReal, q, safePath, str } from "@/lib/forms";
 import { clientKey, limiter } from "@/lib/ratelimit";
 import { newId, store } from "@/lib/store";
 import type { Inquiry } from "@/lib/types";
@@ -17,8 +17,13 @@ import type { Inquiry } from "@/lib/types";
  */
 
 const logins = limiter("login", { windowMs: 10 * 60 * 1000, max: 5 });
+/** The one unauthenticated write on the site. Ten an hour from one address is a person; more is a loop. */
+const inquiries = limiter("inquiry", { windowMs: 60 * 60 * 1000, max: 10 });
 
 export async function submitInquiry(fd: FormData): Promise<void> {
+  const key = await clientKey();
+  if (!inquiries.allowed(key)) redirect(`/${q({ err: "slow" })}#inquiry`);
+  inquiries.fail(key);
   const name = str(fd, "name", 120);
   const email = str(fd, "email", 200);
   const phone = str(fd, "phone", 40);
@@ -71,7 +76,7 @@ export async function adminLogin(fd: FormData): Promise<void> {
   }
   logins.clear(key);
   await setAdminCookie();
-  redirect(next.startsWith("/") ? next : "/admin");
+  redirect(safePath(next, "/admin"));
 }
 
 export async function logout(): Promise<void> {

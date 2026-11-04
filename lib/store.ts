@@ -50,9 +50,21 @@ export function connectionVar(): string | null {
   return keys.find((k) => k.endsWith("_DATABASE_URL") && env[k]) ?? keys.find((k) => k.endsWith("_POSTGRES_URL") && env[k]) ?? null;
 }
 
+/**
+ * Where the on-disk store lives. RGS_DATA_DIR is the override that lets a
+ * production build (`next start`) on the laptop open the seeded store instead
+ * of an empty in-memory one, which is how the gated screens get audited on a
+ * real build. Never set it on a deployment.
+ */
+export function dataDir(): string | null {
+  const set = process.env.RGS_DATA_DIR?.trim();
+  if (set) return set;
+  return process.env.NODE_ENV === "production" ? null : DEV_DATA_DIR;
+}
+
 export function backend(): Backend {
   if (connectionVar()) return "postgres";
-  return process.env.NODE_ENV === "production" ? "pglite-memory" : "pglite-file";
+  return dataDir() ? "pglite-file" : "pglite-memory";
 }
 
 type G = typeof globalThis & { __rgsDb?: Promise<Querier>; __rgsBackend?: Backend };
@@ -90,8 +102,11 @@ async function open(): Promise<Querier> {
   if (which === "pglite-file") {
     // PGlite does not create the parent directory; the first run on a fresh clone would die on mkdir.
     const { mkdir } = await import("node:fs/promises");
-    await mkdir(`${process.cwd()}/${DEV_DATA_DIR}`, { recursive: true });
-    pg = new PGlite(`${process.cwd()}/${DEV_DATA_DIR}`);
+    const { isAbsolute, join } = await import("node:path");
+    const dir = dataDir()!;
+    const full = isAbsolute(dir) ? dir : join(process.cwd(), dir);
+    await mkdir(full, { recursive: true });
+    pg = new PGlite(full);
   } else {
     pg = new PGlite();
   }
@@ -199,14 +214,16 @@ export const store = {
   },
   async checkinsForRoom(roomId: string, limit = 60): Promise<Checkin[]> {
     const d = await db();
-    const { rows } = await d.query(`SELECT data FROM checkins WHERE room_id = $1 ORDER BY at DESC LIMIT $2`, [roomId, limit]);
+    // By the reading's day first, then submit time: a back-filled Monday entered
+    // on Wednesday must not become "the latest reading" and drive the rules.
+    const { rows } = await d.query(`SELECT data FROM checkins WHERE room_id = $1 ORDER BY day DESC, at DESC LIMIT $2`, [roomId, limit]);
     return rows.map((r) => r.data as Checkin);
   },
   /** Newest first, across the facility, inside [fromDay, toDay]. */
   async checkinsBetween(facilityId: string, fromDay: string, toDay: string): Promise<Checkin[]> {
     const d = await db();
     const { rows } = await d.query(
-      `SELECT data FROM checkins WHERE facility_id = $1 AND day >= $2 AND day <= $3 ORDER BY at DESC`,
+      `SELECT data FROM checkins WHERE facility_id = $1 AND day >= $2 AND day <= $3 ORDER BY day DESC, at DESC`,
       [facilityId, fromDay, toDay]
     );
     return rows.map((r) => r.data as Checkin);
@@ -214,7 +231,7 @@ export const store = {
   /** The latest few per room, newest first, for the rules engine. */
   async recentCheckins(facilityId: string, perRoom = 4): Promise<Map<string, Checkin[]>> {
     const d = await db();
-    const { rows } = await d.query(`SELECT data FROM checkins WHERE facility_id = $1 ORDER BY at DESC LIMIT 400`, [facilityId]);
+    const { rows } = await d.query(`SELECT data FROM checkins WHERE facility_id = $1 ORDER BY day DESC, at DESC LIMIT 400`, [facilityId]);
     const out = new Map<string, Checkin[]>();
     for (const r of rows) {
       const c = r.data as Checkin;

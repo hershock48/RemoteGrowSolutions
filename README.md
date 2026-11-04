@@ -57,6 +57,16 @@ npm run dev       # http://localhost:4520
 `npm test` runs the pure logic (irrigation, pricing, rules, dates, the report
 drafter). `npm run typecheck`, `npm run build`, `npm start` (port 4521).
 
+To audit the gated screens on a production build, start it with the two
+local-only variables and hand the auditor the consultant cookie:
+
+```bash
+RGS_ADMIN_PASSCODE=rgs-dev RGS_DATA_DIR=.data/rgs npm start
+```
+
+The cookie value is `sha256("rgs-admin-v1:" + passcode)` in hex, passed as
+`--cookie rgs_admin=<hex>` to `glaze/scripts/audit.mjs` in the glazedweb repo.
+
 ## Environment
 
 See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
@@ -66,6 +76,7 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 | `RGS_ADMIN_PASSCODE` | The consultant side is **closed** in production. Development falls back to `rgs-dev`. |
 | `DATABASE_URL` (or any `*_DATABASE_URL`) | Production runs on an in-memory embedded Postgres and every consultant screen says so. Nothing survives a restart. |
 | `BLOB_READ_WRITE_TOKEN` | The check-in form says photos are not switched on and saves without one. |
+| `RGS_DATA_DIR` (local only) | Lets `npm start` on the laptop open the seeded on-disk store instead of memory, which is how the gated screens get audited on a production build. Never set on a deployment. |
 
 ## Where things live
 
@@ -131,10 +142,15 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 
 ## Checklist (glaze/launch.md)
 
-Verified 2026-11-04 on a production build at 127.0.0.1:4521 with the house
-harnesses, consultant cookie set so the gated screens were covered.
+Verified 2026-11-04 on a production build (`next start`) at 127.0.0.1:4521
+with the house harnesses and the consultant cookie set. The first production
+pass was not what it claimed: with no passcode in the environment the gate
+closed, and with no `RGS_DATA_DIR` the store was in memory, so every gated
+route audited as the sign-in page or a 404. The server was restarted with
+both set and every gated route re-run; the record below is from that run.
 
-- [x] Zero accessibility violations at 390 and 1440 on 21 routes (plus a deliberate 404 probe). The two findings on the first pass (a `/70` opacity on the estimator's tier label, and sideways-scrolling tables without keyboard focus) were fixed at the class, on every table, and re-run.
+- [x] Zero accessibility violations at 390 and 1440 on 21 routes (plus a deliberate 404 probe). Findings fixed at the class and re-run: a `/70` opacity on the estimator's tier label, sideways-scrolling tables without keyboard focus (every table), and a grid column on the room page that let the reading table push the page to 780px on a phone.
+- [x] Independent review (a second session, read-only) on 2026-11-04 found eleven issues; all fixed: two open redirects (`next` on the consultant login, `back` on the calendar toggle); past-due events linking to an edit form that could not find them; flips and harvests counting as overdue tasks; the overdue summary naming the newest task as the oldest; "latest reading" chosen by submit time rather than reading day, so a back-filled entry drove the rules; facility passcodes hashed with a single SHA-256 (now scrypt); check-in photos stored with the browser's content type at guessable URLs; facility creation not validating the timezone; the public inquiry form with no rate limit; archived rooms dropped from an event on edit.
 - [x] Zero console errors, zero 4xx on every route except the 404 probe.
 - [ ] `grep -rn PLACEHOLDER`: one hit, `SITE.email`, listed above.
 - [x] Every form submitted in a real browser: inquiry, both logins, room profile, check-in (with the live runoff figure matching the server's), calendar add and toggle, report draft and approve, call write-up with a dated action landing on the calendar, facility creation, passcode reset.
@@ -150,7 +166,7 @@ harnesses, consultant cookie set so the gated screens were covered.
 - [x] Canonical and sitemap point at `rgs.glazedweb.com`; `robots.ts` disallows the gated trees; vercel.app hosts are `noindex` by header.
 - [x] Favicon: the MI Gas mark (`app/icon.svg`, `app/apple-icon.png`), since RGS is his.
 - [x] HTTPS on Vercel by default.
-- [ ] `npm audit` reviewed at handover.
+- [x] `npm audit --omit=dev` reviewed 2026-11-04: four "high" entries, all one advisory (zod memory exhaustion on oversized collections, GHSA-mrhx-c7xc-m3w5) reached only through `@vercel/blob`'s OIDC config dependency. This app never hands user input to zod and never uses the OIDC path; the only fix npm offers is a downgrade of the Blob SDK. Left as is, re-check when `@vercel/blob` moves past it.
 - [x] No secret in the repo.
 - [x] Studio credit placed, plate ground computed from `#060403` with `plate.mjs`.
 - [ ] Jake told the credit is there.

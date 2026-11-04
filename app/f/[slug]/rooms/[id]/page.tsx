@@ -63,7 +63,10 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
       )}
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-8">
+        {/* min-w-0: a grid column's minimum is its content's, and the reading
+            table is 760px wide, so without this the column grows past the
+            phone and the whole page scrolls sideways (measured at 390). */}
+        <div className="min-w-0 space-y-8">
           <section>
             <h2 className="text-xl text-bone">Right now</h2>
             <div className="mt-3">

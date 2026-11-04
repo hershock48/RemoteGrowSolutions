@@ -90,6 +90,7 @@ export default async function NewFacility({ searchParams }: { searchParams: Prom
             Timezone
           </label>
           <input id="timezone" name="timezone" className="field" maxLength={60} defaultValue={SITE.timezone} />
+          {sp.err === "timezone" && <span className="error">That timezone is not one the system knows. Use the form America/Detroit.</span>}
         </div>
         <div className="sm:col-span-2">
           <button type="submit" className="btn-primary">

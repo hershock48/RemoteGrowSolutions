@@ -42,7 +42,11 @@ export default async function Calendar({ params, searchParams }: { params: Promi
   const here = `${base}/calendar?week=${week}`;
   const roomName = (id?: string) => (id ? rooms.find((r) => r.id === id)?.name ?? "" : "");
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
-  const editing = sp.edit ? events.find((e) => e.id === sp.edit) : undefined;
+  // The event being edited may sit outside the displayed week (the past-due list
+  // links here too), so fall back to a lookup, scoped to this facility.
+  const inWeek = sp.edit ? events.find((e) => e.id === sp.edit) : undefined;
+  const fetched = sp.edit && !inWeek ? await store.event(sp.edit) : null;
+  const editing = inWeek ?? (fetched && fetched.facilityId === facility.id ? fetched : undefined);
   const active = cycles.filter((c) => c.status === "active");
 
   return (
@@ -171,11 +175,15 @@ export default async function Calendar({ params, searchParams }: { params: Promi
               </label>
               <select id="roomId" name="roomId" className="field" defaultValue={editing?.roomId ?? ""}>
                 <option value="">Whole facility</option>
+                {/* Archived rooms stay out of the list, except the one an event
+                    being edited already points at, or saving would silently
+                    drop the link. */}
                 {rooms
-                  .filter((r) => !r.archivedAt)
+                  .filter((r) => !r.archivedAt || r.id === editing?.roomId)
                   .map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
+                      {r.archivedAt ? " (archived)" : ""}
                     </option>
                   ))}
               </select>

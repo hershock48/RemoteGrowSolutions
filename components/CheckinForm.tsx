@@ -81,7 +81,8 @@ export default function CheckinForm({
         </p>
       </div>
 
-      {err && err !== "photo" && err !== "empty" && <p className="error">One of the readings is not a number. Check the {err} box.</p>}
+      {err === "date" && <p className="error">That day has not happened yet, or is not a date.</p>}
+      {err && !["photo", "empty", "date"].includes(err) && <p className="error">One of the readings is not a number. Check the {err} box.</p>}
       {err === "empty" && <p className="error">Enter at least one reading or an observation.</p>}
       {err === "photo" && <p className="error">That photo is over 8 MB. Take a smaller one or skip it.</p>}
 
