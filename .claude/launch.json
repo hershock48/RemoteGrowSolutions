@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 4520 },
+    { "name": "prod", "runtimeExecutable": "npm", "runtimeArgs": ["run", "start"], "port": 4521 }
+  ]
+}
