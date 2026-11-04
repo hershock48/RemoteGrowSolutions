@@ -36,15 +36,20 @@ const DEV_ADMIN = "rgs-dev";
 export const DEMO_ADMIN = "rgs-demo";
 
 /**
- * A deployment with no database and no passcode set is a demo: it seeds the
- * demo facility itself (lib/store.ts) and opens the consultant door on a
- * published passcode, because nothing behind it is real and resets on its
- * own. Attaching a database ends demo mode and the door closes until the
- * real passcode is set. Development on the laptop is not demo mode; it has
- * its own fallback.
+ * A deployment with no database is a demo: it seeds the demo facility itself
+ * (lib/store.ts) and, if no consultant passcode is set either, opens the
+ * consultant door on a published one, because nothing behind it is real and
+ * resets on its own. A set passcode is honoured in demo mode too. Attaching a
+ * database ends demo mode; the door then closes until the real passcode is
+ * set. Development on the laptop is not demo mode; it has its own fallback.
  */
 export function isDemoDeployment(): boolean {
-  return process.env.NODE_ENV === "production" && !process.env.RGS_ADMIN_PASSCODE?.trim() && backend() === "pglite-memory";
+  return process.env.NODE_ENV === "production" && backend() === "pglite-memory";
+}
+
+/** True when the consultant door is open on the published demo passcode. */
+export function usesDemoAdmin(): boolean {
+  return isDemoDeployment() && !process.env.RGS_ADMIN_PASSCODE?.trim();
 }
 const MIN_LENGTH = 4;
 /** A working day and the evening after it. */
@@ -70,7 +75,7 @@ export function adminPasscode(): string | null {
     return set;
   }
   if (process.env.NODE_ENV !== "production") return DEV_ADMIN;
-  return isDemoDeployment() ? DEMO_ADMIN : null;
+  return usesDemoAdmin() ? DEMO_ADMIN : null;
 }
 
 const adminToken = (passcode: string) => sha(`rgs-admin-v1:${passcode}`);

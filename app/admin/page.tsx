@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { logout } from "@/app/actions";
-import { setInquiryStatus } from "@/app/f/actions";
+import { loadDemoFacility, setInquiryStatus } from "@/app/f/actions";
+import { DEMO_PASSCODE, DEMO_SLUG } from "@/lib/demo";
 import { loadDashboard, requireAdmin } from "@/lib/load";
 import { store } from "@/lib/store";
 import { todayIn, fmtWhen } from "@/lib/dates";
@@ -18,9 +19,11 @@ export const dynamic = "force-dynamic";
  * counts, then the inquiries from the public page. The work is behind each
  * facility's own screens; this page says where to go first.
  */
-export default async function Admin() {
+export default async function Admin({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
   await requireAdmin("/admin");
+  const sp = await searchParams;
   const facilities = await store.listFacilities();
+  const hasDemo = facilities.some((f) => f.slug === DEMO_SLUG);
   const boards = await Promise.all(facilities.map(async (f) => ({ f, d: await loadDashboard(f, todayIn(f.timezone)) })));
   const inquiries = await store.inquiries();
   const open = inquiries.filter((i) => i.status === "new" || i.status === "contacted");
@@ -58,10 +61,22 @@ export default async function Admin() {
               {facilities.length} facilit{facilities.length === 1 ? "y" : "ies"}, {totalFlags} room{totalFlags === 1 ? "" : "s"} to look at
             </h1>
           </div>
-          <Link href="/admin/facilities/new" className="btn-primary">
-            New facility
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <form action={loadDemoFacility}>
+              <button type="submit" className="btn-ghost" title={`Writes the sample facility "${DEMO_SLUG}" (passcode ${DEMO_PASSCODE}) into this store, replacing any previous copy.`}>
+                {hasDemo ? "Rebuild the demo facility" : "Load the demo facility"}
+              </button>
+            </form>
+            <Link href="/admin/facilities/new" className="btn-primary">
+              New facility
+            </Link>
+          </div>
         </div>
+        {sp.demo === "loaded" && (
+          <p className="mt-4 rounded-lg border border-ok/50 bg-ink-panel px-4 py-3 text-sm text-bone" role="status">
+            Demo facility loaded. Grower sign-in: facility <code>{DEMO_SLUG}</code>, passcode <code>{DEMO_PASSCODE}</code>. Delete it like any facility when you are done.
+          </p>
+        )}
 
         <ul className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {boards.length === 0 && (

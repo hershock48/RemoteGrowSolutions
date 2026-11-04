@@ -69,13 +69,18 @@ The cookie value is `sha256("rgs-admin-v1:" + passcode)` in hex, passed as
 
 ## Demo mode
 
-A deployment with no database attached and no consultant passcode set is a
-demo. On every cold start it seeds the demo facility from `lib/demo.ts`
-(the same seed `npm run seed` writes locally), the grower door opens on
-`demo` / `grow-demo`, and the consultant door opens on `rgs-demo`. Both
-sign-in pages say so. Nothing behind either door is real and it resets on
-its own. Attaching a database ends demo mode: the seed stops, and the
-consultant door closes until `RGS_ADMIN_PASSCODE` is set.
+A deployment with no database attached is a demo. On every cold start it
+seeds the demo facility from `lib/demo.ts` (the same seed `npm run seed`
+writes locally) and the grower door opens on `demo` / `grow-demo`. If no
+consultant passcode is set either, the consultant door opens on `rgs-demo`;
+a set passcode is honoured. Both sign-in pages say what applies. Nothing
+behind either door is real and it resets on its own. Attaching a database
+ends demo mode: the seed stops, and the consultant door closes until
+`RGS_ADMIN_PASSCODE` is set.
+
+With a real database, the consultant home has a "Load the demo facility"
+button that writes the same sample facility into the store, so the demo can
+be shown from the real link and deleted afterwards like any facility.
 
 ## Environment
 

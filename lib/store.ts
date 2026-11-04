@@ -130,6 +130,17 @@ async function open(): Promise<Querier> {
   return querier;
 }
 
+/**
+ * Write the demo facility into whatever store is attached, on the
+ * consultant's say-so. On a demo deployment this happens by itself at start;
+ * with a real database it is a button on /admin, so the demo can be shown
+ * from the real link and deleted afterwards like any facility.
+ */
+export async function seedDemoFacility(today: string): Promise<string> {
+  const { seedDemo } = await import("./demo");
+  return seedDemo(await db(), today);
+}
+
 export function newId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }

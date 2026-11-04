@@ -552,6 +552,14 @@ export async function createFacility(fd: FormData): Promise<void> {
   redirect(`/f/${f.slug}/profile?saved=created`);
 }
 
+export async function loadDemoFacility(): Promise<void> {
+  if (!(await isAdmin())) redirect("/admin/login?next=/admin");
+  const { seedDemoFacility } = await import("@/lib/store");
+  console.log(`[rgs] ${await seedDemoFacility(todayIn(SITE.timezone))}`);
+  revalidatePath("/admin");
+  redirect("/admin?demo=loaded");
+}
+
 export async function setInquiryStatus(fd: FormData): Promise<void> {
   if (!(await isAdmin())) redirect("/admin/login");
   const iq = await store.inquiry(str(fd, "id", 40));

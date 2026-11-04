@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { adminLogin } from "@/app/actions";
-import { adminPasscode, DEMO_ADMIN, isDemoDeployment } from "@/lib/auth";
+import { adminPasscode, DEMO_ADMIN, usesDemoAdmin } from "@/lib/auth";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Consultant sign in", robots: { index: false, follow: false } };
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Consultant sign in", robots: { index
 export default async function AdminLogin({ searchParams }: { searchParams: Promise<{ err?: string; next?: string }> }) {
   const sp = await searchParams;
   const closed = adminPasscode() === null;
-  const demo = isDemoDeployment();
+  const demo = usesDemoAdmin();
   return (
     <main id="main" className="wrap flex flex-1 items-center justify-center py-16">
       <div className="card w-full max-w-sm p-7">
