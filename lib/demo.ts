@@ -27,10 +27,26 @@ export const DEMO_SLUG = "demo";
 export const DEMO_PASSCODE = "grow-demo";
 
 export async function seedDemo(q: Querier, today: string): Promise<string> {
-  const id = (p: string) => `${p}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  // DETERMINISTIC, on purpose. A deployment with no database seeds this on
+  // every instance independently. If ids, the salt or the readings differed
+  // per instance, a cookie issued by one lambda would be refused by the next
+  // and a room link would 404 one request later (it did, on the first live
+  // demo). So ids are fixed, the salt is fixed, and the numbers come from a
+  // seeded generator: every instance builds the same facility, byte for
+  // byte, for the same `today`.
+  let n = 0;
+  const id = (p: string) => `${p}_demo${String(++n).padStart(3, "0")}`;
   const j = (v: unknown) => JSON.stringify(v);
-  const rnd = (lo: number, hi: number, d = 1) => Math.round((lo + Math.random() * (hi - lo)) * 10 ** d) / 10 ** d;
-  const now = Date.now();
+  let seed = 0x2f6e2b1 ^ Number(today.replace(/-/g, "")); // same today, same numbers
+  const random = () => {
+    // mulberry32
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const rnd = (lo: number, hi: number, d = 1) => Math.round((lo + random() * (hi - lo)) * 10 ** d) / 10 ** d;
+  const now = Date.parse(`${today}T12:00:00Z`);
   const DAY = 86_400_000;
 
   // Wipe a previous demo, so the seed is repeatable.
@@ -40,7 +56,9 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
     await q.query(`DELETE FROM facilities WHERE id = $1`, [r.id]);
   }
 
-  const salt = newSalt();
+  // A fixed salt for the fixed demo passcode; newSalt() stays for real facilities.
+  const salt = "demo-facility-salt-v1";
+  void newSalt;
   const facility: Facility = {
     id: id("fac"),
     slug: DEMO_SLUG,
