@@ -58,7 +58,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
           <div>
             <p className="eyebrow">Today</p>
             <h1 className="mt-2 text-3xl sm:text-4xl">
-              {facilities.length} facilit{facilities.length === 1 ? "y" : "ies"}, {totalFlags} room{totalFlags === 1 ? "" : "s"} to look at
+              {facilities.length} facilit{facilities.length === 1 ? "y" : "ies"}, {totalFlags} room{totalFlags === 1 ? "" : "s"} flagged
             </h1>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -187,6 +187,11 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
         ))}
       </nav>
 
+      {sp.saved && store.backend === "pglite-memory" && (
+        <p className="warn-band mt-6" role="status">
+          This is the demo, which has no database. What you just saved may not appear below. On a site with its database attached, it shows at once.
+        </p>
+      )}
       {sp.saved && !WHERE[sp.saved] && <Note text={MESSAGES[sp.saved] ?? "Saved."} />}
 
       {/* ── Latest readings, as rings ── */}

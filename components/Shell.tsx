@@ -21,6 +21,15 @@ import { SITE } from "@/lib/site";
  * band on every consultant screen, because that is a real fault. The
  * laptop's development store gets a small dot in the header with a title,
  * because that is a fact, not a fault.
+ *
+ * WHAT THE DEMO BAND HAS TO ADMIT. With no database each server instance
+ * seeds its own in-memory copy of the demo. Signed in to the deployed demo on
+ * 2026-11-16: a saved entry never appeared on the room page, and a ticked
+ * task showed unticked on the page that came back and ticked on the next
+ * load, because the save and the page were answered by different instances.
+ * Locally there is one instance, so this cannot be seen there. The band says
+ * so in plain words, since a grower who enters data and sees nothing change
+ * will otherwise conclude the product is broken.
  */
 const TABS: { href: string; label: string }[] = [
   { href: "", label: "Home" },
@@ -101,8 +110,8 @@ export default async function Shell({
         {backend === "pglite-memory" && (
           <p className="warn-band mb-6 print:hidden" role="status">
             {viewer === "rgs"
-              ? "Demo deployment: no database is attached, so this is sample data that resets on its own. Anything you add here is lost on the next restart. Attach a Postgres database (Vercel > Storage > Neon) before a real facility uses it."
-              : "Demo: sample data that resets on its own."}
+              ? "Demo with no database attached. Every screen can be looked at, but what you enter or tick here often will not show afterward: the hosting runs several copies of the site and each keeps its own sample data. Attach a Postgres database (Vercel > Storage > Neon) and entries hold."
+              : "Demo with sample data. You can look at every screen, but what you enter or tick here may not show afterward. That is the demo, not the product: entries hold once the site has its database."}
           </p>
         )}
         {children}
