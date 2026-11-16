@@ -289,3 +289,7 @@ textarea.field {
   .print-break { break-inside: avoid; }
 }
 .print-footer { display: none; }
+
+/* A row that scrolls sideways without drawing its bar: the grower's bottom line. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

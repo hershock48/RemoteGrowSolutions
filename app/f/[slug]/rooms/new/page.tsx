@@ -15,8 +15,8 @@ export default async function NewRoom({ params, searchParams }: { params: Promis
       <p className="eyebrow">New room</p>
       <h1 className="mt-2 text-3xl sm:text-4xl">Add a room</h1>
       <p className="mt-3 max-w-2xl text-[15px] text-muted">
-        Equipment once, targets as they change. The emitter count and flow rate drive the runoff calculation on every
-        check-in, so those two are worth getting right.
+        Equipment once, setpoints as they change. Drippers per plant and dripper size set every shot size and daily
+        volume on the irrigation schedule, so those two are worth getting right.
       </p>
       <div className="mt-8">
         <RoomForm slug={facility.slug} err={sp.err} />

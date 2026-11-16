@@ -36,8 +36,8 @@ export const INCLUDED = [
     body: "Week behind and week ahead, drafted from your own numbers and approved by your consultant before it reaches you. One or two pages.",
   },
   {
-    name: "A living calendar",
-    body: "Flower day, transplants, defoliations, irrigation changes, harvests and the call itself, by room, with every change recorded and who made it.",
+    name: "A checklist under every room",
+    body: "The daily and weekly list for each flower room, ticked as the data comes in, with transplants, defoliations and harvests scheduled beside it.",
   },
   {
     name: "Exceptions, not noise",
@@ -113,6 +113,22 @@ export const EQUIPMENT_CATEGORIES = [
 
 export const SUBSTRATES = ["Coco", "Rockwool", "Rockwool + coco", "Peat blend", "Soil / living soil", "Other"] as const;
 export const SENSOR_PLATFORMS = ["Aroya", "Pinnacle", "Growlink", "Other substrate sensors", "None yet"] as const;
+
+/**
+ * The platforms a facility can record for live graphs, and the ways RGS can
+ * be given sight of them. Jake named Aroya, Growlink and TrolMaster
+ * (2026-11-16). There is no password field anywhere: see saveSensors().
+ */
+export const LIVE_PLATFORMS = ["Aroya", "Growlink", "TrolMaster", "Pinnacle", "Other"] as const;
+export const ACCESS_OPTIONS = ["Viewer invite sent to RGS", "API key requested from the vendor", "Exports uploaded by hand", "Not set up yet"] as const;
+
+/**
+ * The runoff guide. PLACEHOLDER: the video has not been recorded. Put an
+ * .mp4 or .webm in /public (or a full https address) here and the guide page
+ * plays it; while this is empty the page shows the written steps and an
+ * empty frame that says so.
+ */
+export const GUIDE = { videoUrl: "", minPlantsPerZone: 2 } as const;
 export const US_STATES = ["Michigan", "Other"] as const;
 
 /**

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS events (id text PRIMARY KEY, facility_id text NOT NUL
 CREATE TABLE IF NOT EXISTS call_notes (id text PRIMARY KEY, facility_id text NOT NULL, week_of text NOT NULL, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS reports (id text PRIMARY KEY, facility_id text NOT NULL, week_of text NOT NULL, data jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS inquiries (id text PRIMARY KEY, created_at bigint NOT NULL, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS task_ticks (id text PRIMARY KEY, facility_id text NOT NULL, room_id text NOT NULL, period text NOT NULL, data jsonb NOT NULL);
+CREATE TABLE IF NOT EXISTS sensor_series (id text PRIMARY KEY, facility_id text NOT NULL, room_id text NOT NULL, uploaded_at bigint NOT NULL, data jsonb NOT NULL);
 CREATE INDEX IF NOT EXISTS checkins_room_at ON checkins (room_id, at DESC);
 CREATE INDEX IF NOT EXISTS checkins_facility_day ON checkins (facility_id, day);
 CREATE INDEX IF NOT EXISTS events_facility_date ON events (facility_id, date);

@@ -71,7 +71,7 @@ export default async function Rooms({ params }: { params: Promise<{ slug: string
                       Open
                     </Link>
                     <Link href={`${base}/checkin?room=${r.id}`} className="btn-small">
-                      Check in
+                      Enter data
                     </Link>
                   </td>
                 </tr>

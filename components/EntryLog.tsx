@@ -1,5 +1,6 @@
 import { fmtDay, fmtWhen } from "@/lib/dates";
 import { ml } from "@/lib/irrigation";
+import Link from "next/link";
 import type { Checkin } from "@/lib/types";
 
 /**
@@ -17,7 +18,7 @@ const fmt = (v: number | undefined, unit = "", d?: number) => (v === undefined ?
 
 type Group = { name: string; items: [string, string][] };
 
-export default function EntryLog({ checkins, timezone, limit = 40 }: { checkins: Checkin[]; timezone: string; limit?: number }) {
+export default function EntryLog({ checkins, timezone, limit = 40, editBase }: { checkins: Checkin[]; timezone: string; limit?: number; editBase?: string }) {
   if (!checkins.length) return <p className="card px-5 py-4 text-sm text-muted">No entries yet.</p>;
   const shown = checkins.slice(0, limit);
   return (
@@ -48,7 +49,7 @@ export default function EntryLog({ checkins, timezone, limit = 40 }: { checkins:
             items: [
               ["EC", fmt(c.runoffEc)],
               ["pH", fmt(c.runoffPh)],
-              ["Volume", fmt(c.runoffMl, " mL")],
+              ["Volume", fmt(c.runoffMl === undefined ? undefined : Math.round(c.runoffMl), " mL")],
               ["Percent", fmt(c.runoffPct, "%", 1)],
             ],
           },
@@ -71,6 +72,11 @@ export default function EntryLog({ checkins, timezone, limit = 40 }: { checkins:
               </h3>
               <span className="text-xs text-muted">
                 Entered {fmtWhen(c.at, timezone)} by the {c.submittedBy === "rgs" ? "consultant" : "grower"}
+                {editBase && (
+                  <Link href={`${editBase}&day=${c.day}`} className="ml-3 font-semibold text-flare hover:underline" aria-label={`Add to the entry for ${fmtDay(c.day)}`}>
+                    Add to it
+                  </Link>
+                )}
               </span>
             </header>
             <div className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
@@ -88,6 +94,19 @@ export default function EntryLog({ checkins, timezone, limit = 40 }: { checkins:
                 </section>
               ))}
             </div>
+            {c.zones && c.zones.length > 0 && (
+              <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-line/60 pt-3 text-[13px] text-muted" aria-label="Runoff by feed zone">
+                {[...new Set(c.zones.map((z) => z.zone))].map((zone) => (
+                  <li key={zone}>
+                    <span className="font-semibold text-bone">Zone {zone}</span>{" "}
+                    {c.zones!
+                      .filter((z) => z.zone === zone)
+                      .map((z) => `${z.source === "row" ? "row" : z.n === 1 ? "A" : "B"} ${z.ml === 0 ? "0 mL, N/A" : [z.ec !== undefined ? `EC ${z.ec}` : null, z.ph !== undefined ? `pH ${z.ph}` : null, z.ml !== undefined ? `${z.ml} mL` : null].filter(Boolean).join(" ")}`)
+                      .join(" · ")}
+                  </li>
+                ))}
+              </ul>
+            )}
             {(c.observations || c.photoUrl) && (
               <p className="mt-3 text-[15px] leading-relaxed text-bone/90">
                 {c.observations}

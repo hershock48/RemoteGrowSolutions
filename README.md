@@ -25,14 +25,40 @@ secret). Consultant passcode in development: `rgs-dev`.
 | --- | --- | --- |
 | Public front door | `/`, `/pricing`, `/calculator` | What the subscription is, the four tiers with the estimator, the irrigation and runoff calculator, the facility requirements, and an inquiry form that lands in the consultant's inbox. |
 | Facility sign-in | `/login` | Facility name plus passcode, rate limited. |
-| Overview | `/f/{slug}` | The facility profile first, on both sides (contact, rooms, lights, sensors, the four counts), then the grower's reason to open the page: check-ins due this week per room with a button on each. Then the rooms needing a look (one row per room, worst severity on its edge), every run as a bar from flip to planned harvest with today marked and four weeks of compliance dots, then the week's calendar and the latest report. A first-week progress strip until the facility has a room, a check-in, a call and an approved report. |
-| Rooms | `/f/{slug}/rooms`, `/rooms/new`, `/rooms/{id}`, `/rooms/{id}/edit`, `/compare` | Equipment profile (fixtures, substrate, emitters, flow rate, durations, sensors) and the room's own targets. Start and close runs; the crop clock writes the flip and planned harvest to the calendar. The rooms list is deliberately plain: room, kind, day of run, lights, last entry (no runoff, no genetics; Jake, 2026-11-04). The room page's hero is feed EC against runoff EC over the run with the ceiling dashed; runoff percent, temperature and RH follow as band charts; below them, what the grower entered date by date in the groups of his own write-up (environment, lights, irrigation, runoff, substrate, observations). Genetics live on the room page's run card. `/compare` overlays up to four rooms' runs on one flower-day axis. |
-| Check-in | `/f/{slug}/checkin?room=` | The three-times-a-week form. Emitters and flow rate come from the room, so the grower types shot length, shots and collected runoff and sees the percentage as they type. Previous reading in every placeholder, target under every box. Photo to Vercel Blob when a store is attached. |
-| Calendar | `/f/{slug}/calendar?week=` | Seven columns, every room's flower day, every event with its owner and done state. Add, edit, mark done, remove. Who made each change and when. |
+| Home | `/f/{slug}` | The facility profile first, on both sides (contact, rooms, lights, irrigation, and the sensor platforms with a link to their live graphs). Then every flower room as a card: the room drawn from its profile, where the run stands, four coloured marks (environment, feed, runoff, tasks), any reading outside its setpoint, the week as a strip of squares and the checklist for today. No counters and no instructions in words; colour and ticks carry the status (Jake, 2026-11-16). A first-week progress strip until the facility has a room, a day of data, a call and an approved report. A grower also gets one quiet line fixed to the bottom of every screen: how many lines are open today, by room. |
+| Rooms | `/f/{slug}/rooms`, `/rooms/new`, `/rooms/{id}`, `/rooms/{id}/edit`, `/compare` | The room page, same on both sides, in this order: the room drawn from its profile (`components/RoomVisual.tsx`: walls, benches, plants, fixtures, bench ends coloured by feed zone) beside the room profile in the shape of his weekly sheet (day of flower, genetics, feed EC and pH, lighting, target temp and RH, P1 and P2 timing); **Tasks** (the checklist for today with a tick box on every line, the week as his sheet draws it, and dated one-off items for the room); **Irrigation** (drippers, feeds a day, total volume, P1 and P2 across the lights-on window, every shot with its on and off time and volume, feed against runoff EC, runoff percent, runoff by feed zone, uploaded substrate graphs); **Environment** (temperature, RH, VPD and CO2 against their setpoints, four charts, uploaded climate graphs); a form to upload a sensor export; the dated entries; the run. The rooms list stays plain: room, kind, day of run, lights, last entry. `/compare` overlays up to four rooms on one flower-day axis. |
+| Enter data | `/f/{slug}/checkin?room=&day=` | Reached from a room, never from a tab. One entry per room per day: saving again adds to it, and every box already filled shows what is there. Environment, feed EC and pH, then runoff by feed zone (Plant A, Plant B and an optional whole-row read, each EC, pH and mL), substrate, observations and a canopy photo. The applied volume comes from the P1 and P2 schedule on the room, so shot counts are not retyped; the runoff percentage appears while typing. |
+| Guide | `/f/{slug}/guide` | How to take a runoff read, by plant (at least two per feed zone, spread out) and by whole row, with a frame for the video demonstration. The video is not recorded yet: `GUIDE.videoUrl` in `lib/site.ts`. |
 | Reports | `/f/{slug}/reports`, `/reports/{id}`, `/reports/{id}/edit` | Drafted from the week's data by `lib/report.ts`, edited and approved by the consultant, then visible to the grower. The view adds the quarter's three owner numbers (harvests, grams per square foot, days in flower, each against the prior quarter) and one feed-versus-runoff chart per room with the report's week shaded, computed when the page renders. Prints as a document: paper, ink, charts in their print palette, a running footer. |
-| Call notes | `/f/{slug}/notes`, `/notes/new` | Two versions from one call: the internal record (consultant only) and the client summary (theirs to keep). Dated action items become calendar tasks. |
-| Profile | `/f/{slug}/profile` | Facility onboarding: contact, counts, timezone, ten equipment categories. Consultant sets the performance status and can reset the passcode. |
+| Call notes | `/f/{slug}/notes`, `/notes/new` | Two versions from one call: the internal record (consultant only) and the client summary (theirs to keep). Dated action items become scheduled items under their room. |
+| Profile | `/f/{slug}/profile` | Facility onboarding: contact, counts, timezone, ten equipment categories. **Sensor platforms** (`#sensors`): which of Aroya, Growlink, TrolMaster the facility runs, how the consultant sees it, and the address of its live graphs. No password is asked for or stored. **Task list** (`#tasks`): the list every flower room is prompted with; the consultant edits it, the grower reads it. Consultant sets the performance status and can reset the passcode. |
 | Consultant | `/admin`, `/admin/facilities/new` | Every facility with its counts, inquiries with a status, and facility creation. |
+
+## The round of 2026-11-16 (Jake's second review)
+
+His email, point by point, and where each landed.
+
+| He asked | What exists |
+| --- | --- |
+| Remove the four counters on Home | Gone. The profile card carries the sensor platforms in their place. |
+| No "needs a look", no "1 of 3, 2 to go"; colour and checklists | Home is cards with coloured marks and ticked lines. The rules engine still decides what is out of range; it is shown as a coloured dot beside the reading. |
+| A visual for each flower room, maybe a 3D profile with benches, lights and plants | `components/RoomVisual.tsx`, a projected drawing generated from the profile. It is a schematic: counts are real, positions are even spacing. |
+| Full irrigation schedule from dripper size and drippers per plant; P1 and P2 with on and off times | `lib/schedule.ts` and `components/ScheduleView.tsx`. Shot size is never typed. |
+| Logins for Aroya, Growlink and TrolMaster so live graphs show under irrigation and environment | **Partly.** The profile records the platform, how the consultant sees it and the address of its live graphs, and every room links out to them. Graphs are drawn in the app from an uploaded export. Vendor logins are not collected and nothing pulls from a vendor yet: see "What is not built". |
+| Substrate sensor info should upload as a graph | `lib/sensorcsv.ts` reads a CSV export by its headers; `components/SeriesCharts.tsx` draws it. |
+| Prompt the customer for daily and weekly tasks, starting from his sheet | `lib/tasks.ts`: his eleven daily lines with the facility and name details taken out, plus the weekly room profile. A facility can carry its own list. |
+| A task list that checks itself when the information is entered | Six of the lines tick from data (photo, observations, dryback, runoff by zone, temperature and RH, assigned items). The rest are ticked by hand. |
+| A guide page with a video for runoff reads | `/guide`, written steps live, video frame empty until he records it. |
+| A place to enter runoff EC, pH and volume for each feed zone of every room | The entry form, by zone. |
+| The customer sees room profiles too | Same room page for both. |
+| No "this week" tab; prompts under each room, small alerts at the top or bottom | The calendar and check-in tabs are gone. Dated items sit under their room. The grower's bottom line is the alert. |
+| Mobile friendly | Checked at 320, 375, 768 and 1440. |
+| Host calls in the app with notes generated automatically? | A question, answered in the hand-off note and under "What is not built". Not built. |
+
+Two conflicts this round surfaced, both left as they were until Jake rules:
+
+- **Daily or three a week.** His sheet is Monday to Friday, so the default task list is weekdays. The public pages and `lib/pricing.ts` still promise three check-ins a week. One of them has to move.
+- **TrolMaster.** He now names it for temperature and RH graphs. The requirements list on the public page still says TrolMaster sensors are not supported, which was said about substrate sensors. The wording needs his eye.
 
 ## Nothing here is rented
 
@@ -139,8 +165,15 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
   notes. The profile page shows the tier each facility lands in.
 - Onboarding fee for complex facilities, and the three-month minimum: both
   are stated as policy on `/pricing` with no number for the fee.
-- Which sensor platforms will grant API access. Until one does, substrate
-  readings are typed.
+- Which sensor platforms will grant API access. Growlink documents a
+  developer API on its Sprout plan and above; TrolMaster runs an API gateway
+  that issues keys on request for a monthly fee per device; no public Aroya
+  API was found (checked 2026-11-16). Until a facility has one, its graphs
+  come from an uploaded export and a link out to the live platform.
+- The runoff video for `/guide`, and whether the written steps match what he
+  shows in it. The steps between his rules are the ordinary method and are a
+  draft until he has read them.
+- Daily against three a week, and the TrolMaster wording: both above.
 - Billing. His notes assume Stripe subscriptions; Stripe's restricted list
   covers cultivation education, and this is cultivation management. Settle
   the processor before designing the billing layer. Nothing here takes money.
@@ -149,7 +182,11 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 
 ## What is not built
 
-- Sensor ingestion. Every field marked "from your sensors" is typed today. The daily dryback sawtooth growers read on Aroya is deliberately not drawn from three readings a week; it arrives with the first sensor integration.
+- **Live sensor integration.** Nothing pulls readings from Aroya, Growlink or TrolMaster. A graph inside the app comes from an export the grower uploads; "live" is a link that opens the vendor's own dashboard. Each vendor needs its own connector and its own access (an API key issued to the facility), and none of that exists until a real facility has one to test against.
+- **Stored vendor logins.** Deliberately. The app has nothing that can use a third-party password, and holding one is a liability with no benefit. The profile records the platform and the route that works: a viewer invite to the consultant, or an API key.
+- **Video upload.** A canopy photo uploads (4 MB, when a Blob store is attached). A 30-second phone video is tens of megabytes and needs a direct-to-storage upload that is not built; the video line on the checklist is ticked by hand.
+- **Calls hosted in the app with notes written automatically.** Possible, and a project of its own: a calling provider for the room and the recording, a transcription service, a model to turn the transcript into notes (which needs an API key, against Kevin's standing rule), and recorded consent from everyone on the call. Today the consultant holds the call wherever he likes and writes the note.
+- **True 3D.** The room drawing is a fixed projected view. It does not rotate and it is not measured from the room.
 - Transcription of calls. The consultant writes the note.
 - Model-drafted prose. See the rule above.
 - Billing and the subscription agreement.
@@ -167,7 +204,7 @@ both set and every gated route re-run; the record below is from that run.
 - [x] Zero accessibility violations at 390 and 1440 on 21 routes (plus a deliberate 404 probe). Findings fixed at the class and re-run: a `/70` opacity on the estimator's tier label, sideways-scrolling tables without keyboard focus (every table), and a grid column on the room page that let the reading table push the page to 780px on a phone.
 - [x] Independent review (a second session, read-only) on 2026-11-04 found eleven issues; all fixed: two open redirects (`next` on the consultant login, `back` on the calendar toggle); past-due events linking to an edit form that could not find them; flips and harvests counting as overdue tasks; the overdue summary naming the newest task as the oldest; "latest reading" chosen by submit time rather than reading day, so a back-filled entry drove the rules; facility passcodes hashed with a single SHA-256 (now scrypt); check-in photos stored with the browser's content type at guessable URLs; facility creation not validating the timezone; the public inquiry form with no rate limit; archived rooms dropped from an event on edit.
 - [x] Zero console errors, zero 4xx on every route except the 404 probe.
-- [ ] `grep -rn PLACEHOLDER`: one hit, `SITE.email`, listed above.
+- [ ] `grep -rn PLACEHOLDER`: `SITE.email`, and `GUIDE.videoUrl` with the guide's written steps, all listed above.
 - [x] Every form submitted in a real browser: inquiry, both logins, room profile, check-in (with the live runoff figure matching the server's), calendar add and toggle, report draft and approve, call write-up with a dated action landing on the calendar, facility creation, passcode reset.
 - [ ] Remote data source verified on the deployment: needs the Neon database attached first.
 - [x] Checked at 320, 390, 768 and 1440: no horizontal overflow on 13 routes at 320 and 768, 22 at 390 and 1440.

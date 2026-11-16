@@ -1,9 +1,11 @@
 import { hashPasscode, newSalt } from "./passcode";
-import { irrigation } from "./irrigation";
 import { addDays, flowerDay, weekStart } from "./dates";
+import { buildSchedule } from "./schedule";
+import { runoffFromZones, tickKey } from "./tasks";
+import { vpdKpa } from "./vpd";
 import { draftReport } from "./report";
 import { evaluateRoom } from "./rules";
-import type { CalEvent, CallNote, Checkin, Cycle, Facility, Inquiry, Report, Room, Targets } from "./types";
+import type { CalEvent, CallNote, Checkin, Cycle, Facility, Inquiry, Report, Room, Schedule, SensorSeries, Targets, TaskTick, ZoneRead } from "./types";
 
 /**
  * One believable facility, written into whatever store it is handed: the
@@ -19,6 +21,13 @@ import type { CalEvent, CallNote, Checkin, Cycle, Facility, Inquiry, Report, Roo
  * submitting, one task is past due, last week has an approved report and a
  * written-up call, and each room has finished runs behind it for the
  * quarter figures.
+ *
+ * Every flower room has benches, four feed zones and a P1 and P2 schedule,
+ * every weekday entry carries two plant reads per zone, this week's task
+ * list is ticked to a believable state (Flower 01 nearly done today, Flower
+ * 02 half way, Flower 03 not started), and two rooms carry three days of
+ * sensor readings as an uploaded export, so the graphs have something in
+ * them.
  */
 
 type Querier = { query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
@@ -52,7 +61,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
   // Wipe a previous demo, so the seed is repeatable.
   const prev = await q.query(`SELECT id FROM facilities WHERE slug = $1`, [DEMO_SLUG]);
   for (const r of prev.rows) {
-    for (const t of ["rooms", "cycles", "checkins", "events", "call_notes", "reports"]) await q.query(`DELETE FROM ${t} WHERE facility_id = $1`, [r.id]);
+    for (const t of ["rooms", "cycles", "checkins", "events", "call_notes", "reports", "task_ticks", "sensor_series"]) await q.query(`DELETE FROM ${t} WHERE facility_id = $1`, [r.id]);
     await q.query(`DELETE FROM facilities WHERE id = $1`, [r.id]);
   }
 
@@ -80,19 +89,24 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       irrigation: "Growlink irrigation controller, 4 zones per room, 2 × 0.5 GPH Netafim emitters per plant.",
       substrate: "Grodan Hugo 6x6x6 on Grodan slabs; 1-gallon coco in veg.",
       nutrients: "Athena Pro Line, two-part, Dosatron injectors.",
-      sensors: "Aroya Teros 12, four per room, API read access granted to RGS.",
+      sensors: "Aroya Teros 12, four per room, viewer access shared with RGS. TrolMaster for room temperature, RH and CO2.",
       water: "City water through RO, starting EC 0.1, pH 6.0 after RO.",
       cultivation: "GMO, Gelato 41, Permanent Marker. 12 plants per light. 21-day veg, 63-day flower, one room flipping every two weeks.",
       operations: "Head grower plus three cultivation techs. Target 55 g/sq ft. 2025 average 48 g/sq ft.",
     },
     readiness: "conditional",
     readinessNote: "Mother room has no RH control and clone success is running at 72%. Corrective plan agreed on the first call; reviewed at week 4.",
+    sensors: [
+      { platform: "Aroya", account: "Northstar Cultivation", access: "Viewer invite sent to RGS", liveUrl: "https://aroya.io/", note: "Demo link: it opens Aroya's public site. A real facility pastes the address of its own dashboard." },
+      { platform: "TrolMaster", account: "Northstar Flower", access: "Exports uploaded by hand", liveUrl: "", note: "Temperature, RH and CO2 for the four flower rooms." },
+    ],
     passcodeSalt: salt,
     passcodeHash: hashPasscode(salt, DEMO_PASSCODE),
     createdAt: now - 30 * DAY,
   };
   await q.query(`INSERT INTO facilities (id, slug, created_at, data) VALUES ($1, $2, $3, $4::jsonb)`, [facility.id, facility.slug, facility.createdAt, j(facility)]);
 
+  const schedule: Schedule = { lightsOn: "06:00", lightsOff: "18:00", p1: { start: "07:00", shots: 6, shotMin: 3, everyMin: 30 }, p2: { start: "11:00", shots: 4, shotMin: 2, everyMin: 90 } };
   const roomBase = {
     facilityId: facility.id,
     fixtureModel: "Fluence SPYDR 2p",
@@ -110,17 +124,22 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
     controller: "Growlink",
     sensorPlatform: "Aroya",
     genetics: "GMO, Gelato 41",
+    benches: 6,
+    feedZones: 4,
+    schedule,
     createdAt: now - 29 * DAY,
   };
-  const flowerTargets: Targets = { tempF: [76, 82], rh: [55, 65], ppfd: [850, 1050], feedEc: [2.8, 3.2], runoffEcMax: 4.5, runoffPct: [10, 20] };
+  const flowerTargets: Targets = { tempF: [76, 82], rh: [55, 65], ppfd: [850, 1050], feedEc: [2.8, 3.2], runoffEcMax: 4.5, runoffPct: [10, 20], vpd: [1.1, 1.5], co2: [1000, 1300] };
+  // Flower 01 is in late flower: lower feed, drier air. Its setpoints moved with the crop.
+  const lateTargets: Targets = { ...flowerTargets, rh: [48, 58], feedEc: [2.4, 2.8], vpd: [1.3, 1.8] };
 
   const rooms: Room[] = [
-    { ...roomBase, id: id("room"), name: "Flower 01", kind: "flower", targets: flowerTargets },
+    { ...roomBase, id: id("room"), name: "Flower 01", kind: "flower", targets: lateTargets },
     { ...roomBase, id: id("room"), name: "Flower 02", kind: "flower", targets: flowerTargets },
     { ...roomBase, id: id("room"), name: "Flower 03", kind: "flower", targets: { ...flowerTargets, runoffPct: [15, 25] } },
     { ...roomBase, id: id("room"), name: "Flower 04", kind: "flower", targets: flowerTargets },
-    { ...roomBase, id: id("room"), name: "Veg", kind: "veg", fixtureCount: 24, canopySqft: 480, substrate: "Coco", containerGal: 1, emittersPerPlant: 1, emitterGph: 0.5, targets: { tempF: [76, 80], rh: [65, 75], runoffPct: [10, 20] } },
-    { ...roomBase, id: id("room"), name: "Mothers", kind: "mom", fixtureCount: 8, canopySqft: 160, substrate: "Coco", containerGal: 3, emittersPerPlant: 2, emitterGph: 0.5, targets: { tempF: [74, 80], rh: [60, 70], runoffPct: [10, 20] } },
+    { ...roomBase, id: id("room"), name: "Veg", kind: "veg", benches: 4, feedZones: 2, schedule: undefined, fixtureCount: 24, canopySqft: 480, substrate: "Coco", containerGal: 1, emittersPerPlant: 1, emitterGph: 0.5, targets: { tempF: [76, 80], rh: [65, 75], runoffPct: [10, 20] } },
+    { ...roomBase, id: id("room"), name: "Mothers", kind: "mom", benches: 2, feedZones: 1, schedule: undefined, fixtureCount: 8, canopySqft: 160, substrate: "Coco", containerGal: 3, emittersPerPlant: 2, emitterGph: 0.5, targets: { tempF: [74, 80], rh: [60, 70], runoffPct: [10, 20] } },
   ];
   for (const r of rooms) await q.query(`INSERT INTO rooms (id, facility_id, created_at, data) VALUES ($1, $2, $3, $4::jsonb)`, [r.id, r.facilityId, r.createdAt, j(r)]);
 
@@ -178,27 +197,40 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
     }
   }
 
-  // Check-ins: Mon/Wed/Fri for the last three weeks, per flower room. Room 02
-  // drifts high on runoff EC; Room 04 stops submitting six days ago.
+  // Entries: every weekday for the last three weeks, per flower room, with two
+  // plant reads in each of the four feed zones. Flower 02 drifts high on
+  // runoff EC; Flower 04 stops submitting six days ago. Today is left part
+  // done on purpose, so the checklist has open lines on it.
   type Seed = Omit<CalEvent, "id" | "facilityId" | "createdBy" | "createdAt"> & { done?: boolean };
   const events: Seed[] = [];
+  const built = buildSchedule(schedule, 2, 0.5, 1.6);
+  const NOTES = ["Canopy even, no visible issues.", "Scouting cards clean.", "Lower fans yellowing, on schedule.", "Trellis holding, no flopping."];
+  const isWeekday = (day: string) => {
+    const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
+    return dow >= 1 && dow <= 5;
+  };
   for (let i = 0; i < 4; i++) {
     const room = rooms[i];
     const cycle = cycles[i];
     for (let back = 21; back >= 0; back--) {
       const day = addDays(today, -back);
-      const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
-      if (![1, 3, 5].includes(dow)) continue;
+      if (!isWeekday(day)) continue;
       if (i === 3 && back < 6) continue; // Flower 04 goes quiet.
+      if (i === 2 && back === 0) continue; // Flower 03 has not started today.
       const fd = flowerDay(cycle.flipDate, day);
       if (fd === null) continue;
       const late = fd > 45;
-      const shotMin = late ? 4 : 5;
-      const shots = late ? 5 : 8;
-      const runoffMl = i === 2 ? rnd(380, 520, 0) : rnd(220, 420, 0);
-      const calc = irrigation({ emittersPerPlant: 2, emitterGph: 0.5, shotMin, shotsPerDay: shots, runoffMl });
+      const partial = i === 1 && back === 0; // Flower 02 today: environment in, two of four zones read.
       const ecDrift = i === 1 ? (21 - back) * 0.06 : 0;
       const feedEc = late ? 2.6 : 3.0;
+      const base = feedEc * 1.35 + ecDrift;
+      const zones: ZoneRead[] = [];
+      for (let z = 1; z <= (partial ? 2 : 4); z++) {
+        for (const n of [1, 2]) {
+          zones.push({ zone: z, source: "plant", n, ec: Math.round((base + rnd(-0.25, 0.25, 2)) * 100) / 100, ph: rnd(5.9, 6.3, 2), ml: i === 2 ? rnd(260, 400, 0) : rnd(180, 310, 0) });
+        }
+      }
+      const agg = runoffFromZones(zones);
       const c: Checkin = {
         id: id("chk"),
         facilityId: facility.id,
@@ -208,22 +240,19 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
         day,
         dayOfFlower: fd,
         tempF: rnd(77, 81),
-        rh: late ? rnd(50, 58, 0) : rnd(56, 63, 0),
+        rh: late ? rnd(50, 57, 0) : rnd(56, 63, 0),
         ppfd: rnd(900, 1000, 0),
-        co2: rnd(1000, 1200, 0),
+        co2: rnd(1050, 1250, 0),
         feedEc,
         feedPh: rnd(5.7, 5.9, 2),
-        runoffEc: Math.round((feedEc * 1.35 + ecDrift + rnd(-0.2, 0.2, 2)) * 100) / 100,
-        runoffPh: rnd(5.9, 6.3, 2),
-        runoffMl,
-        shotMin,
-        shotsPerDay: shots,
-        feedMl: calc.dailyMl,
-        runoffPct: calc.runoffPct ?? undefined,
-        substrateWc: late ? rnd(42, 50, 0) : rnd(55, 62, 0),
-        substrateEc: Math.round((feedEc * 1.4 + ecDrift) * 100) / 100,
-        dryback: late ? rnd(14, 20, 0) : rnd(8, 12, 0),
-        observations: back === 7 && i === 1 ? "Slight tip burn on the two benches nearest the door." : back === 2 && i === 0 ? "Fade starting on the GMO, on schedule." : "",
+        ...agg,
+        feedMl: built.dailyMl,
+        runoffPct: agg.runoffMl !== undefined ? (agg.runoffMl / built.dailyMl) * 100 : undefined,
+        zones,
+        substrateWc: partial ? undefined : late ? rnd(42, 50, 0) : rnd(55, 62, 0),
+        substrateEc: partial ? undefined : Math.round((feedEc * 1.4 + ecDrift) * 100) / 100,
+        dryback: partial ? undefined : late ? rnd(14, 20, 0) : rnd(8, 12, 0),
+        observations: partial ? "" : back === 7 && i === 1 ? "Slight tip burn on the two benches nearest the door." : back === 2 && i === 0 ? "Fade starting on the GMO, on schedule." : NOTES[(back + i) % NOTES.length],
         submittedBy: "client",
       };
       await q.query(`INSERT INTO checkins (id, facility_id, room_id, day, at, data) VALUES ($1, $2, $3, $4, $5, $6::jsonb)`, [c.id, c.facilityId, c.roomId, c.day, c.at, j(c)]);
@@ -259,6 +288,75 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       createdAt: now - 20 * DAY,
     };
     await q.query(`INSERT INTO events (id, facility_id, date, data) VALUES ($1, $2, $3, $4::jsonb)`, [row.id, row.facilityId, row.date, j(row)]);
+  }
+
+  // This week's hand ticks. Past weekdays are done for the three rooms that
+  // are reporting, with one line missed on Flower 02 so the grid is not a
+  // wall of green; today is part done.
+  const BY_HAND = ["canopy", "p1", "pitchers", "p2", "feed", "alarms"];
+  const TODAY: string[][] = [["canopy", "p2", "feed", "alarms"], ["canopy", "p2"], [], []];
+  const tick = async (room: Room, taskId: string, period: string) => {
+    const t: TaskTick = { id: tickKey(room.id, taskId, period), facilityId: facility.id, roomId: room.id, taskId, period, at: Date.parse(`${period}T21:00:00Z`), by: "client" };
+    await q.query(`INSERT INTO task_ticks (id, facility_id, room_id, period, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [t.id, t.facilityId, t.roomId, t.period, j(t)]);
+  };
+  for (let i = 0; i < 3; i++) {
+    let first = true;
+    for (let day = thisMonday; day < today; day = addDays(day, 1)) {
+      if (!isWeekday(day)) continue;
+      for (const taskId of BY_HAND) if (!(i === 1 && first && taskId === "pitchers")) await tick(rooms[i], taskId, day);
+      first = false;
+    }
+    if (isWeekday(today)) for (const taskId of TODAY[i]) await tick(rooms[i], taskId, today);
+    if (i !== 1) await tick(rooms[i], "profile", thisMonday);
+  }
+
+  // Three days of sensor readings, as if exported from the platform and
+  // uploaded: the substrate sawtooth for Flower 01 and Flower 02, built from
+  // the same P1 and P2 schedule the room profile carries, and the room
+  // climate for Flower 01.
+  const stamps: number[] = [];
+  for (let back = 3; back >= 1; back--) {
+    const d0 = Date.parse(`${addDays(today, -back)}T00:00:00Z`);
+    for (let m = 0; m < 1440; m += 15) stamps.push(d0 + m * 60_000);
+  }
+  const lit = (ms: number) => {
+    const m = (ms / 60_000) % 1440;
+    return m >= 360 && m < 1080;
+  };
+  const saveSeries = (sr: SensorSeries) => q.query(`INSERT INTO sensor_series (id, facility_id, room_id, uploaded_at, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [sr.id, sr.facilityId, sr.roomId, sr.uploadedAt, j(sr)]);
+  for (const i of [0, 1]) {
+    let wc = i === 0 ? 44 : 52;
+    const wcs: number[] = [];
+    const ecs: number[] = [];
+    stamps.forEach((ms, k) => {
+      const m = (ms / 60_000) % 1440;
+      // Dry down faster under the lights, then add each shot that fired in this quarter hour.
+      wc -= lit(ms) ? (i === 0 ? 0.3 : 0.24) : 0.07;
+      for (const e of built.events) {
+        const at = 360 + e.rel;
+        if (at >= m && at < m + 15) wc += e.phase === "P1" ? 2.6 : 1.0;
+      }
+      wc = Math.min(i === 0 ? 56 : 64, wc);
+      wcs.push(Math.round((wc + rnd(-0.15, 0.15, 2)) * 10) / 10);
+      ecs.push(Math.round(((i === 0 ? 3.4 : 4.6) + (60 - wc) * 0.07 + (i === 1 ? k * 0.0022 : 0) + rnd(-0.03, 0.03, 2)) * 100) / 100);
+    });
+    await saveSeries({ id: id("ser"), facilityId: facility.id, roomId: rooms[i].id, kind: "substrate", label: "Aroya export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { wc: wcs, ec: ecs } });
+  }
+  {
+    const temp: number[] = [];
+    const rh: number[] = [];
+    const vpd: number[] = [];
+    const co2: number[] = [];
+    for (const ms of stamps) {
+      const on = lit(ms);
+      const tF = (on ? 79 : 71.5) + Math.sin(ms / 3_600_000) * 0.8 + rnd(-0.3, 0.3, 2);
+      const h = (on ? 54 : 50) + Math.cos(ms / 2_700_000) * 2 + rnd(-0.6, 0.6, 2);
+      temp.push(Math.round(tF * 10) / 10);
+      rh.push(Math.round(h * 10) / 10);
+      vpd.push(vpdKpa(tF, h) ?? 0);
+      co2.push(Math.round((on ? 1180 : 520) + rnd(-40, 40, 0)));
+    }
+    await saveSeries({ id: id("ser"), facilityId: facility.id, roomId: rooms[0].id, kind: "environment", label: "TrolMaster export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { temp, rh, vpd, co2 } });
   }
 
   // Last week's call, written up.

@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
   // Both drivers load at runtime through dynamic import and neither bundles:
   // pg wants its native-optional friends left alone, and PGlite ships WASM.
   serverExternalPackages: ["pg", "@electric-sql/pglite"],
+  // A canopy photo (4 MB) or a sensor export (3 MB) rides in a server action.
+  // The default limit is 1 MB, which refused both before the action ran.
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async headers() {
     return [
       {

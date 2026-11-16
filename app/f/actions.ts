@@ -6,12 +6,15 @@ import { hashPasscode, isAdmin, newSalt, PASSCODE_MIN, viewerFor, type Viewer } 
 import { addDays, isISODate, todayIn, weekStart } from "@/lib/dates";
 import { int, num, q, safePath, SLUG, slugify, str } from "@/lib/forms";
 import { irrigation } from "@/lib/irrigation";
+import { buildSchedule, parseHHMM } from "@/lib/schedule";
+import { DEFAULT_TASKS, periodFor, runoffFromZones, tickKey } from "@/lib/tasks";
+import { parseSensorCsv } from "@/lib/sensorcsv";
 import { loadDashboard } from "@/lib/load";
 import { draftReport } from "@/lib/report";
 import { dayOf } from "@/lib/rules";
 import { DEFAULT_TARGETS, EQUIPMENT_CATEGORIES, SITE } from "@/lib/site";
 import { newId, store } from "@/lib/store";
-import type { ActionItem, CalEvent, CallNote, Checkin, Cycle, EventKind, Facility, Readiness, Report, Room, RoomKind, Targets } from "@/lib/types";
+import type { ActionItem, CalEvent, CallNote, Checkin, Cycle, EventKind, Facility, Phase, Readiness, Report, Room, RoomKind, Schedule, SensorConnection, TaskAuto, TaskTemplate, Targets, ZoneRead } from "@/lib/types";
 
 /**
  * Every write behind the facility door. Each action loads the facility by
@@ -85,6 +88,30 @@ export async function saveRoom(fd: FormData): Promise<void> {
   if (feLo !== undefined && feHi !== undefined && !bad(feLo) && !bad(feHi)) targets.feedEc = [Math.min(feLo, feHi), Math.max(feLo, feHi)];
   const rec = num(fd, "runoffEcMax");
   if (rec !== undefined && !bad(rec)) targets.runoffEcMax = rec;
+  const optional = (lo: string, hi: string): [number, number] | undefined => {
+    const a = num(fd, lo);
+    const b = num(fd, hi);
+    return a !== undefined && b !== undefined && !bad(a) && !bad(b) ? [Math.min(a, b), Math.max(a, b)] : undefined;
+  };
+  targets.vpd = optional("vpdLo", "vpdHi");
+  targets.co2 = optional("co2Lo", "co2Hi");
+
+  // The irrigation schedule. A phase needs a start, a shot count and a shot
+  // length to exist; anything less and that phase is simply not set.
+  const phase = (p: string): Phase | undefined => {
+    const start = str(fd, `${p}Start`, 5);
+    const shots = int(fd, `${p}Shots`);
+    const shotMin = num(fd, `${p}ShotMin`);
+    const everyMin = num(fd, `${p}Every`);
+    if (parseHHMM(start) === null || !shots || !shotMin || bad(shots) || bad(shotMin) || bad(everyMin) || shots < 0 || shotMin < 0) return undefined;
+    return { start, shots: Math.min(60, shots), shotMin, everyMin: Math.max(0, everyMin ?? 0) };
+  };
+  const lightsOn = str(fd, "lightsOn", 5);
+  const lightsOff = str(fd, "lightsOff", 5);
+  const schedule: Schedule | undefined =
+    parseHHMM(lightsOn) !== null ? { lightsOn, lightsOff: parseHHMM(lightsOff) !== null ? lightsOff : lightsOn, p1: phase("p1"), p2: phase("p2") } : undefined;
+  const benches = int(fd, "benches");
+  const feedZones = int(fd, "feedZones");
 
   const room: Room = {
     id: existing?.id ?? newId("room"),
@@ -100,6 +127,9 @@ export async function saveRoom(fd: FormData): Promise<void> {
     genetics: str(fd, "genetics", 200),
     ...numbers,
     targets,
+    benches: benches && !bad(benches) && benches > 0 ? Math.min(24, benches) : undefined,
+    feedZones: feedZones && !bad(feedZones) && feedZones > 0 ? Math.min(24, feedZones) : undefined,
+    schedule,
     createdAt: existing?.createdAt ?? Date.now(),
     archivedAt: str(fd, "archived", 4) === "yes" ? (existing?.archivedAt ?? Date.now()) : undefined,
   };
@@ -185,59 +215,95 @@ export async function endCycle(fd: FormData): Promise<void> {
 
 /* ------------------------------ check-ins ------------------------------ */
 
+const READ_SLOTS = [
+  ["a", "plant", 1],
+  ["b", "plant", 2],
+  ["row", "row", 0],
+] as const;
+
+/**
+ * One entry per room per day. Entering more later the same day adds to it:
+ * temperature in the morning, runoff in the afternoon, and both land on the
+ * same record, which is what lets a task tick the moment its part is in. A
+ * blank box keeps what was there; a zone that is re-entered replaces that
+ * zone's reads.
+ */
 export async function saveCheckin(fd: FormData): Promise<void> {
   const { facility, viewer, today } = await gate(str(fd, "slug", 40));
   const base = `/f/${facility.slug}`;
   const room = await store.room(str(fd, "roomId", 40));
   if (!room || room.facilityId !== facility.id) redirect(`${base}/checkin${q({ err: "room" })}`);
-  const back = `${base}/checkin?room=${room.id}`;
 
   const day = str(fd, "day", 10) || today;
+  const back = `${base}/checkin?room=${room.id}${isISODate(day) ? `&day=${day}` : ""}`;
   // A reading cannot belong to a day that has not happened in the facility's timezone.
-  if (!isISODate(day) || day > today) redirect(`${back}&err=date`);
-  const fields = ["tempF", "rh", "ppfd", "co2", "feedEc", "feedPh", "runoffEc", "runoffPh", "runoffMl", "shotMin", "shotsPerDay", "substrateWc", "substrateEc", "dryback"] as const;
+  if (!isISODate(day) || day > today) redirect(`${base}/checkin?room=${room.id}&err=date`);
+
+  const fields = ["tempF", "rh", "ppfd", "co2", "feedEc", "feedPh", "shotMin", "shotsPerDay", "substrateWc", "substrateEc", "dryback"] as const;
   const values: Partial<Record<(typeof fields)[number], number>> = {};
   for (const f of fields) {
     const v = num(fd, f);
     if (bad(v)) redirect(`${back}&err=${f}`);
     if (v !== undefined) values[f] = v;
   }
-  if (Object.keys(values).length === 0 && !str(fd, "observations", 1)) redirect(`${back}&err=empty`);
+
+  const zoneCount = Math.max(1, Math.floor(room.feedZones ?? 1));
+  const submitted: ZoneRead[] = [];
+  for (let z = 1; z <= zoneCount; z++) {
+    for (const [k, source, n] of READ_SLOTS) {
+      const ec = num(fd, `z${z}_${k}_ec`);
+      const ph = num(fd, `z${z}_${k}_ph`);
+      const ml = num(fd, `z${z}_${k}_ml`);
+      if (bad(ec) || bad(ph) || bad(ml)) redirect(`${back}&err=runoff`);
+      if (ec !== undefined || ph !== undefined || ml !== undefined) submitted.push({ zone: z, source, n, ec, ph, ml });
+    }
+  }
+
+  const existing = await store.checkinForDay(room.id, day);
+  const touched = new Set(submitted.map((r) => r.zone));
+  const zones = [...(existing?.zones ?? []).filter((r) => !touched.has(r.zone)), ...submitted].sort((a, b) => a.zone - b.zone || a.n - b.n);
+  const typed = str(fd, "observations", 3000);
+  const photo = fd.get("photo");
+  const hasPhoto = photo instanceof File && photo.size > 0;
+  if (Object.keys(values).length === 0 && submitted.length === 0 && !typed && !hasPhoto) redirect(`${back}&err=empty`);
 
   const cycle = await store.activeCycle(room.id);
-  const calc = irrigation({
-    emittersPerPlant: room.emittersPerPlant,
-    emitterGph: room.emitterGph,
-    shotMin: values.shotMin ?? 0,
-    shotsPerDay: values.shotsPerDay ?? 0,
-    runoffMl: values.runoffMl,
-  });
+  const merged = { ...existing, ...values };
+  // The day's volume comes from the room's schedule when it has one, so the
+  // grower is not asked to retype what the controller already runs.
+  const built = buildSchedule(room.schedule, room.emittersPerPlant, room.emitterGph, room.containerGal);
+  const dailyMl =
+    built.dailyMl > 0
+      ? built.dailyMl
+      : irrigation({ emittersPerPlant: room.emittersPerPlant, emitterGph: room.emitterGph, shotMin: merged.shotMin ?? 0, shotsPerDay: merged.shotsPerDay ?? 0 }).dailyMl;
+  const agg = zones.length ? runoffFromZones(zones) : { runoffEc: existing?.runoffEc, runoffPh: existing?.runoffPh, runoffMl: existing?.runoffMl };
 
   const checkin: Checkin = {
-    id: newId("chk"),
+    ...merged,
+    id: existing?.id ?? newId("chk"),
     facilityId: facility.id,
     roomId: room.id,
-    cycleId: cycle?.id,
+    cycleId: existing?.cycleId ?? cycle?.id,
     at: Date.now(),
     day,
-    dayOfFlower: dayOf(cycle, day),
-    ...values,
-    feedMl: calc.dailyMl > 0 ? calc.dailyMl : undefined,
-    runoffPct: calc.runoffPct ?? undefined,
-    observations: str(fd, "observations", 3000),
+    dayOfFlower: existing?.dayOfFlower ?? dayOf(cycle, day),
+    ...agg,
+    feedMl: dailyMl > 0 ? dailyMl : undefined,
+    runoffPct: agg.runoffMl !== undefined && dailyMl > 0 ? (agg.runoffMl / dailyMl) * 100 : undefined,
+    zones: zones.length ? zones : undefined,
+    observations: typed || existing?.observations || "",
     submittedBy: viewer,
   };
 
   // The canopy photo rides to Vercel Blob when the hosting has a store. With
-  // no token the check-in saves without it and the form says so beforehand.
-  const photo = fd.get("photo");
-  if (photo instanceof File && photo.size > 0 && process.env.BLOB_READ_WRITE_TOKEN) {
+  // no token the entry saves without it and the form says so beforehand.
+  if (hasPhoto && process.env.BLOB_READ_WRITE_TOKEN) {
     // Only an image, served as the image type WE name, at a URL nobody can
     // guess from the ids: a public blob host must never serve an uploaded
     // file with a content type the browser supplied.
     const IMAGE_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/heic": "heic" };
     const ext = IMAGE_TYPES[photo.type];
-    if (!ext || photo.size > 8 * 1024 * 1024) redirect(`${back}&err=photo`);
+    if (!ext || photo.size > 4 * 1024 * 1024) redirect(`${back}&err=photo`);
     const { put } = await import("@vercel/blob");
     const blob = await put(`${facility.slug}/${room.id}/${day}-${checkin.id}.${ext}`, photo, {
       access: "public",
@@ -249,36 +315,166 @@ export async function saveCheckin(fd: FormData): Promise<void> {
 
   await store.saveCheckin(checkin);
   revalidatePath(base, "layout");
-  redirect(`${base}/rooms/${room.id}${q({ saved: "checkin" })}`);
+  redirect(`${base}/rooms/${room.id}${q({ saved: "checkin" })}#tasks`);
 }
 
-/* ------------------------------ calendar ------------------------------ */
+/* ------------------------------ the task list ------------------------------ */
 
+/** Tick a task by hand, or untick it. The period is worked out here, never trusted from the form. */
+export async function toggleTask(fd: FormData): Promise<void> {
+  const { facility, viewer, today } = await gate(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  const room = await store.room(str(fd, "roomId", 40));
+  if (!room || room.facilityId !== facility.id) redirect(base);
+  const back = safePath(str(fd, "back", 200), `${base}/rooms/${room.id}#tasks`);
+  const task = (facility.tasks?.length ? facility.tasks : DEFAULT_TASKS).find((t) => t.id === str(fd, "taskId", 40));
+  const day = str(fd, "day", 10) || today;
+  const period = task && isISODate(day) && day <= today ? periodFor(task, day) : null;
+  if (!task || !period) redirect(back);
+  await store.toggleTick({ id: tickKey(room.id, task.id, period), facilityId: facility.id, roomId: room.id, taskId: task.id, period, at: Date.now(), by: viewer });
+  revalidatePath(base, "layout");
+  redirect(back);
+}
+
+const CADENCES = ["weekdays", "daily", "weekly"] as const;
+const AUTOS = ["none", "environment", "runoff", "photo", "notes", "substrate", "assigned"] as const;
+
+/** The consultant's editor for a facility's list. A blank title removes the row. */
+export async function saveTasks(fd: FormData): Promise<void> {
+  const { facility } = await gateAdmin(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  if (str(fd, "reset", 4) === "yes") {
+    await store.saveFacility({ ...facility, tasks: undefined, updatedAt: Date.now() });
+    redirect(`${base}/profile${q({ saved: "tasks" })}#tasks`);
+  }
+  const tasks: TaskTemplate[] = [];
+  for (let i = 0; i < 40; i++) {
+    const title = str(fd, `title_${i}`, 140);
+    if (!title) continue;
+    const cadence = str(fd, `cadence_${i}`, 10) as TaskTemplate["cadence"];
+    const auto = str(fd, `auto_${i}`, 12) as TaskAuto;
+    tasks.push({
+      id: str(fd, `id_${i}`, 40) || `t${Date.now().toString(36)}${i}`,
+      title,
+      cadence: (CADENCES as readonly string[]).includes(cadence) ? cadence : "weekdays",
+      auto: (AUTOS as readonly string[]).includes(auto) ? auto : "none",
+    });
+  }
+  await store.saveFacility({ ...facility, tasks: tasks.length ? tasks : undefined, updatedAt: Date.now() });
+  revalidatePath(base, "layout");
+  redirect(`${base}/profile${q({ saved: "tasks" })}#tasks`);
+}
+
+/* ------------------------------ sensor platforms ------------------------------ */
+
+/**
+ * Which platform a facility runs and how RGS sees it. This deliberately has
+ * no password box. A stored login to somebody else's platform is a liability
+ * with nothing to use it yet; the two routes that work are the grower
+ * inviting RGS as a viewer on their account, or the vendor issuing an API
+ * key, and this records which one is in place and where the live graphs are.
+ */
+export async function saveSensors(fd: FormData): Promise<void> {
+  const { facility } = await gate(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  const sensors: SensorConnection[] = [];
+  for (let i = 0; i < 4; i++) {
+    const platform = str(fd, `platform_${i}`, 40);
+    if (!platform) continue;
+    const liveUrl = str(fd, `liveUrl_${i}`, 300);
+    sensors.push({
+      platform,
+      account: str(fd, `account_${i}`, 120),
+      access: str(fd, `access_${i}`, 40),
+      // Only an https link is ever rendered as a link.
+      liveUrl: /^https:\/\/[^\s]+$/i.test(liveUrl) ? liveUrl : "",
+      note: str(fd, `note_${i}`, 300),
+    });
+  }
+  await store.saveFacility({ ...facility, sensors: sensors.length ? sensors : undefined, updatedAt: Date.now() });
+  revalidatePath(base, "layout");
+  redirect(`${base}/profile${q({ saved: "sensors" })}#sensors`);
+}
+
+/** A sensor export, uploaded as a file or pasted, drawn on the room page as a graph. */
+export async function uploadSeries(fd: FormData): Promise<void> {
+  const { facility, viewer } = await gate(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  const room = await store.room(str(fd, "roomId", 40));
+  if (!room || room.facilityId !== facility.id) redirect(base);
+  const back = `${base}/rooms/${room.id}`;
+  const file = fd.get("export");
+  let text = str(fd, "paste", 2_000_000);
+  let label = "Pasted export";
+  if (file instanceof File && file.size > 0) {
+    if (file.size > 3 * 1024 * 1024) redirect(`${back}${q({ err: "export-size" })}#graphs`);
+    text = await file.text();
+    label = file.name.replace(/[^\w .()-]/g, "").slice(0, 80) || "Export";
+  }
+  if (!text.trim()) redirect(`${back}${q({ err: "export-empty" })}#graphs`);
+  const parsed = parseSensorCsv(text);
+  if (parsed.error) redirect(`${back}${q({ err: "export-read" })}#graphs`);
+  await store.saveSeries({
+    id: newId("ser"),
+    facilityId: facility.id,
+    roomId: room.id,
+    kind: parsed.kind,
+    label,
+    uploadedAt: Date.now(),
+    by: viewer,
+    t: parsed.t,
+    cols: parsed.cols,
+  });
+  revalidatePath(base, "layout");
+  redirect(`${back}${q({ saved: "export" })}#graphs`);
+}
+
+export async function deleteSeries(fd: FormData): Promise<void> {
+  const { facility } = await gate(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  const s = await store.series(str(fd, "id", 40));
+  if (s && s.facilityId === facility.id) {
+    await store.deleteSeries(s.id);
+    revalidatePath(base, "layout");
+    redirect(`${base}/rooms/${s.roomId}#graphs`);
+  }
+  redirect(base);
+}
+
+/* ------------------------------ scheduled items ------------------------------ */
+
+/**
+ * One-off dated work: a defoliation, a transplant, an action item from a
+ * call. These used to live on their own calendar tab; they now sit under the
+ * room they belong to (Jake, 2026-11-16: the timeframe and the room are not
+ * to be separated at the tab level), so every form says where to go back to.
+ */
 export async function saveEvent(fd: FormData): Promise<void> {
   const { facility, viewer } = await gate(str(fd, "slug", 40));
   const base = `/f/${facility.slug}`;
-  const date = str(fd, "date", 10);
-  const week = str(fd, "week", 10);
-  const back = `${base}/calendar${q({ week: isISODate(week) ? week : undefined })}`;
-  if (!isISODate(date)) redirect(`${back}${back.includes("?") ? "&" : "?"}err=date`);
-  const title = str(fd, "title", 120);
-  if (!title) redirect(`${back}${back.includes("?") ? "&" : "?"}err=title`);
-  const kind = str(fd, "kind", 12) as EventKind;
   const roomId = str(fd, "roomId", 40);
   const room = roomId ? await store.room(roomId) : null;
+  const owned = room && room.facilityId === facility.id ? room : null;
+  const back = safePath(str(fd, "back", 200), owned ? `${base}/rooms/${owned.id}#tasks` : base);
+  const [path, hash] = back.split("#");
+  const withErr = (err: string) => `${path}${path.includes("?") ? "&" : "?"}err=${err}${hash ? `#${hash}` : ""}`;
+  const date = str(fd, "date", 10);
+  if (!isISODate(date)) redirect(withErr("date"));
+  const title = str(fd, "title", 120);
+  if (!title) redirect(withErr("title"));
+  const kind = str(fd, "kind", 12) as EventKind;
   const id = str(fd, "id", 40);
   const existing = id ? await store.event(id) : null;
   if (existing && existing.facilityId !== facility.id) redirect(back);
-  const owner = str(fd, "owner", 6) === "rgs" ? "rgs" : "client";
   const e: CalEvent = {
     id: existing?.id ?? newId("ev"),
     facilityId: facility.id,
-    roomId: room && room.facilityId === facility.id ? room.id : undefined,
+    roomId: owned?.id,
     cycleId: existing?.cycleId,
     date,
     title,
     kind: (["task", "milestone", "transplant", "flip", "harvest", "call", "review"] as EventKind[]).includes(kind) ? kind : "task",
-    owner,
+    owner: str(fd, "owner", 6) === "rgs" ? "rgs" : "client",
     doneAt: existing?.doneAt,
     doneBy: existing?.doneBy,
     source: existing?.source ?? "manual",
@@ -289,15 +485,14 @@ export async function saveEvent(fd: FormData): Promise<void> {
   };
   await store.saveEvent(e);
   revalidatePath(base, "layout");
-  redirect(`${base}/calendar${q({ week: weekStart(date), saved: "1" })}`);
+  redirect(back);
 }
 
 export async function toggleEvent(fd: FormData): Promise<void> {
   const { facility, viewer } = await gate(str(fd, "slug", 40));
   const base = `/f/${facility.slug}`;
   const e = await store.event(str(fd, "id", 40));
-  const week = str(fd, "week", 10);
-  const back = `${base}/calendar${q({ week: isISODate(week) ? week : undefined })}`;
+  const back = safePath(str(fd, "back", 200), base);
   if (!e || e.facilityId !== facility.id) redirect(back);
   if (e.doneAt) {
     e.doneAt = undefined;
@@ -309,17 +504,16 @@ export async function toggleEvent(fd: FormData): Promise<void> {
   e.updatedAt = Date.now();
   await store.saveEvent(e);
   revalidatePath(base, "layout");
-  redirect(safePath(str(fd, "back", 200), back));
+  redirect(back);
 }
 
 export async function deleteEvent(fd: FormData): Promise<void> {
   const { facility } = await gate(str(fd, "slug", 40));
   const base = `/f/${facility.slug}`;
   const e = await store.event(str(fd, "id", 40));
-  const week = str(fd, "week", 10);
   if (e && e.facilityId === facility.id) await store.deleteEvent(e.id);
   revalidatePath(base, "layout");
-  redirect(`${base}/calendar${q({ week: isISODate(week) ? week : undefined })}`);
+  redirect(safePath(str(fd, "back", 200), base));
 }
 
 /* ------------------------------ profile ------------------------------ */

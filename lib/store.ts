@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { CalEvent, CallNote, Checkin, Cycle, Facility, Inquiry, Report, Room } from "./types";
+import type { CalEvent, CallNote, Checkin, Cycle, Facility, Inquiry, Report, Room, SensorSeries, TaskTick } from "./types";
 import { DEV_DATA_DIR, SCHEMA } from "./schema";
 
 /**
@@ -265,6 +265,12 @@ export const store = {
     }
     return out;
   },
+  /** The one entry a room has for a day. Entering more that day adds to it. */
+  async checkinForDay(roomId: string, day: string): Promise<Checkin | null> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT data FROM checkins WHERE room_id = $1 AND day = $2 ORDER BY at DESC LIMIT 1`, [roomId, day]);
+    return rows.length ? (rows[0].data as Checkin) : null;
+  },
   async checkin(id: string): Promise<Checkin | null> {
     const d = await db();
     const { rows } = await d.query(`SELECT data FROM checkins WHERE id = $1`, [id]);
@@ -347,6 +353,60 @@ export const store = {
     const d = await db();
     const { rows } = await d.query(`SELECT data FROM reports WHERE facility_id = $1 AND week_of = $2`, [facilityId, weekOf]);
     return rows.length ? (rows[0].data as Report) : null;
+  },
+
+  /* hand ticks on the task list */
+  async ticksBetween(facilityId: string, fromPeriod: string, toPeriod: string): Promise<TaskTick[]> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT data FROM task_ticks WHERE facility_id = $1 AND period >= $2 AND period <= $3`, [facilityId, fromPeriod, toPeriod]);
+    return rows.map((r) => r.data as TaskTick);
+  },
+  /** Tick it if it is not ticked, untick it if it is. Returns the new state. */
+  async toggleTick(t: TaskTick): Promise<boolean> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT id FROM task_ticks WHERE id = $1`, [t.id]);
+    if (rows.length) {
+      await d.query(`DELETE FROM task_ticks WHERE id = $1`, [t.id]);
+      return false;
+    }
+    await d.query(`INSERT INTO task_ticks (id, facility_id, room_id, period, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [t.id, t.facilityId, t.roomId, t.period, j(t)]);
+    return true;
+  },
+
+  /* sensor exports */
+  async saveSeries(s: SensorSeries) {
+    const d = await db();
+    await d.query(`INSERT INTO sensor_series (id, facility_id, room_id, uploaded_at, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [s.id, s.facilityId, s.roomId, s.uploadedAt, j(s)]);
+  },
+  async seriesForRoom(roomId: string, limit = 4): Promise<SensorSeries[]> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT data FROM sensor_series WHERE room_id = $1 ORDER BY uploaded_at DESC LIMIT $2`, [roomId, limit]);
+    return rows.map((r) => r.data as SensorSeries);
+  },
+  /** Who uploaded what and when, without the points: enough to tick a task. */
+  async seriesSince(facilityId: string, sinceMs: number): Promise<{ roomId: string; kind: SensorSeries["kind"]; uploadedAt: number }[]> {
+    const d = await db();
+    const { rows } = await d.query(
+      `SELECT room_id, uploaded_at, data->>'kind' AS kind FROM sensor_series WHERE facility_id = $1 AND uploaded_at >= $2`,
+      [facilityId, sinceMs]
+    );
+    return rows.map((r) => ({ roomId: String(r.room_id), kind: r.kind as SensorSeries["kind"], uploadedAt: Number(r.uploaded_at) }));
+  },
+  async series(id: string): Promise<SensorSeries | null> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT data FROM sensor_series WHERE id = $1`, [id]);
+    return rows.length ? (rows[0].data as SensorSeries) : null;
+  },
+  async deleteSeries(id: string) {
+    const d = await db();
+    await d.query(`DELETE FROM sensor_series WHERE id = $1`, [id]);
+  },
+
+  /* scheduled items */
+  async eventsForRoom(roomId: string, facilityId: string, fromDate: string): Promise<CalEvent[]> {
+    const d = await db();
+    const { rows } = await d.query(`SELECT data FROM events WHERE facility_id = $1 AND date >= $2 ORDER BY date ASC`, [facilityId, fromDate]);
+    return rows.map((r) => r.data as CalEvent).filter((e) => e.roomId === roomId);
   },
 
   /* inquiries from the public page */

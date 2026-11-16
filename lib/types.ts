@@ -26,7 +26,20 @@ export type Targets = {
   runoffEcMax?: number;
   /** Percent of daily applied volume collected as runoff. */
   runoffPct: Range;
+  /** Air VPD in kPa, and CO2 in ppm. Setpoints the consultant reads the room against. */
+  vpd?: Range;
+  co2?: Range;
 };
+
+/** One irrigation phase: when it starts, how many shots, how long each runs, how far apart. */
+export type Phase = { start: string; shots: number; shotMin: number; everyMin: number };
+
+/**
+ * The day's irrigation as the room runs it. P1 is the ramp from lights on up
+ * to field capacity; P2 is the maintenance phase after it. Clock times are
+ * "HH:MM" on the facility's wall clock.
+ */
+export type Schedule = { lightsOn: string; lightsOff: string; p1?: Phase; p2?: Phase };
 
 export type Room = {
   id: string;
@@ -50,9 +63,20 @@ export type Room = {
   sensorPlatform: string;
   genetics: string;
   targets: Targets;
+  /** Benches (or rows of tables) in the room, for the drawing. */
+  benches?: number;
+  /** Feed zones: every one gets its own runoff read. Trays, on some sites. */
+  feedZones?: number;
+  schedule?: Schedule;
   createdAt: number;
   archivedAt?: number;
 };
+
+/**
+ * One runoff read. A zone is read from at least two plants spread across it,
+ * or from a whole-row collection where the room is plumbed for one.
+ */
+export type ZoneRead = { zone: number; source: "plant" | "row"; n: number; ec?: number; ph?: number; ml?: number };
 
 export type Cycle = {
   id: string;
@@ -98,7 +122,36 @@ export type Checkin = {
   dryback?: number;
   observations: string;
   photoUrl?: string;
+  /** Runoff by feed zone. The single runoff figures above are the averages of these. */
+  zones?: ZoneRead[];
   submittedBy: "client" | "rgs";
+};
+
+/** What ticks a task off by itself. "none" is ticked by hand. */
+export type TaskAuto = "none" | "environment" | "runoff" | "photo" | "notes" | "substrate" | "assigned";
+
+export type TaskTemplate = { id: string; title: string; cadence: "weekdays" | "daily" | "weekly"; auto: TaskAuto };
+
+/** A hand tick: this task, this room, this day (or the Monday of this week). */
+export type TaskTick = { id: string; facilityId: string; roomId: string; taskId: string; period: string; at: number; by: "client" | "rgs" };
+
+/**
+ * How RGS sees a facility's sensor platform. No passwords: the grower invites
+ * RGS as a viewer, or the vendor issues an API key, and this records which.
+ */
+export type SensorConnection = { platform: string; account: string; access: string; liveUrl: string; note: string };
+
+/** A sensor export, uploaded as a file and drawn as a graph. Times are wall-clock ms. */
+export type SensorSeries = {
+  id: string;
+  facilityId: string;
+  roomId: string;
+  kind: "substrate" | "environment";
+  label: string;
+  uploadedAt: number;
+  by: "client" | "rgs";
+  t: number[];
+  cols: Record<string, (number | null)[]>;
 };
 
 export type EventKind = "task" | "milestone" | "transplant" | "flip" | "harvest" | "call" | "review";
@@ -176,6 +229,9 @@ export type Facility = {
   equipment: Record<string, string>;
   readiness: Readiness;
   readinessNote: string;
+  /** The daily and weekly list growers are prompted with. Unset means the house default. */
+  tasks?: TaskTemplate[];
+  sensors?: SensorConnection[];
   /** sha256 of salt + passcode. The passcode itself is never stored. */
   passcodeHash: string;
   passcodeSalt: string;
