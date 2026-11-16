@@ -6,7 +6,8 @@ import { TodayList, WeekStrip } from "@/components/TaskList";
 import { loadBoard } from "@/lib/board";
 import { requireFacility } from "@/lib/load";
 import { store } from "@/lib/store";
-import { addDays, diffDays, fmtDay } from "@/lib/dates";
+import { addDays, diffDays, fmtDay, minutesNowIn } from "@/lib/dates";
+import { isLit } from "@/lib/schedule";
 import { timeline } from "@/lib/series";
 import { READINESS } from "@/lib/site";
 import { tally } from "@/lib/tasks";
@@ -41,6 +42,7 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
   const facilityWide = d.events.filter((e) => !e.roomId && !e.doneAt && diffDays(today, e.date) >= 0).slice(0, 4);
   const ready = READINESS[facility.readiness];
   const sensors = facility.sensors ?? [];
+  const nowMin = minutesNowIn(facility.timezone);
 
   // The first-week path. Shown until every step is done, then never again.
   const steps = [
@@ -99,10 +101,13 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
               {sensors.map((s, i) => (
                 <li key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                   <span className="flex items-center gap-2 font-semibold text-bone">
-                    <span className={`dot ${s.liveUrl ? "dot-ok" : "dot-warn"}`} aria-hidden="true" />
+                    <span className={`dot ${s.liveUrl || s.key ? "dot-ok" : "dot-warn"}`} aria-hidden="true" />
                     {s.platform}
                   </span>
-                  <span className="text-muted">{s.access || "Access not set up"}</span>
+                  <span className="text-muted">
+                    {s.access || "Access not set up"}
+                    {s.key ? " · API key on file" : ""}
+                  </span>
                   {s.liveUrl && (
                     <a href={s.liveUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-flare hover:underline">
                       Open {s.platform} live graphs
@@ -184,7 +189,7 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
               <li key={room.id} className="card flex flex-col p-4 sm:p-5">
                 <div className="grid gap-x-5 gap-y-3 sm:grid-cols-[210px_1fr] sm:items-start">
                   <Link href={`${base}/rooms/${room.id}`} aria-label={`Open ${room.name}`} className="block">
-                    <RoomVisual room={room} tone={tone} compact />
+                    <RoomVisual room={room} tone={tone} compact progress={tl?.frac} lit={isLit(room.schedule, nowMin)} />
                   </Link>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3">

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Shell from "@/components/Shell";
-import { resetPasscode, saveProfile, saveSensors, saveTasks } from "@/app/f/actions";
+import { checkSensorKey, resetPasscode, saveProfile, saveSensors, saveTasks } from "@/app/f/actions";
 import { requireFacility } from "@/lib/load";
+import { secretsReady } from "@/lib/secret";
 import { store } from "@/lib/store";
+import { VENDOR_KEY_HELP } from "@/lib/vendors";
+import { fmtWhen } from "@/lib/dates";
 import { quote, usd } from "@/lib/pricing";
+import type { SensorConnection } from "@/lib/types";
 import { ACCESS_OPTIONS, EQUIPMENT_CATEGORIES, LIVE_PLATFORMS, READINESS } from "@/lib/site";
 import { AUTO_LABEL, DEFAULT_TASKS } from "@/lib/tasks";
 
@@ -25,7 +29,8 @@ export default async function Profile({ params, searchParams }: { params: Promis
   const qte = quote(f.lightsTotal, f.flowerRooms);
   const ready = READINESS[f.readiness];
   const tasks = f.tasks?.length ? f.tasks : DEFAULT_TASKS;
-  const sensorRows = [...(f.sensors ?? []), { platform: "", account: "", access: "", liveUrl: "", note: "" }].slice(0, 4);
+  const sensorRows: SensorConnection[] = [...(f.sensors ?? []), { platform: "", account: "", access: "", liveUrl: "", note: "" }].slice(0, 4);
+  const keysOn = secretsReady() && store.backend !== "pglite-memory";
   const taskRows = [...tasks, ...Array.from({ length: 2 }, () => ({ id: "", title: "", cadence: "weekdays" as const, auto: "none" as const }))];
   const CADENCE = { weekdays: "Monday to Friday", daily: "Every day", weekly: "Once a week" } as const;
 
@@ -46,6 +51,8 @@ export default async function Profile({ params, searchParams }: { params: Promis
               ? "Passcode changed. Every signed-in device for this facility is now signed out."
               : sp.saved === "sensors"
                 ? "Sensor platforms saved."
+                : sp.saved === "keycheck"
+                  ? "Key checked. The answer is beside it below."
                 : sp.saved === "tasks"
                   ? "Task list saved. Every flower room now shows it."
                   : "Saved."}
@@ -153,7 +160,7 @@ export default async function Profile({ params, searchParams }: { params: Promis
         <p className="eyebrow">Sensor platforms</p>
         <h2 className="mt-2 text-xl text-bone">Aroya, Growlink, TrolMaster</h2>
         <p className="mt-2 max-w-3xl text-sm text-muted">
-          Record the platform this facility runs and how the consultant gets to see it. Paste the address of the live graphs and both sides can open them from every room. Passwords are never entered or kept here: invite the consultant as a viewer inside the platform, or ask the vendor for an API key.
+          Record the platform this facility runs and how the consultant gets to see it. Paste the address of the live graphs and both sides can open them from every room. Enter the API key the vendor issued and the readings can be pulled in. A username and password are never asked for: no vendor lets another app sign in with them, and an API key can be read-only and switched off without changing anyone&apos;s password.
         </p>
         <form action={saveSensors} className="mt-5 space-y-4">
           <input type="hidden" name="slug" value={f.slug} />
@@ -185,12 +192,62 @@ export default async function Profile({ params, searchParams }: { params: Promis
                   <input id={`note_${i}`} name={`note_${i}`} className="field" defaultValue={s.note} maxLength={300} placeholder="Which rooms it covers, who to ask for access." />
                 </F>
               </div>
+              <div className="sm:col-span-2 lg:col-span-4">
+                <label className="label" htmlFor={`key_${i}`}>
+                  API key from the vendor
+                </label>
+                {keysOn ? (
+                  <>
+                    <input
+                      id={`key_${i}`}
+                      name={`key_${i}`}
+                      type="password"
+                      className="field"
+                      maxLength={400}
+                      autoComplete="off"
+                      placeholder={s.key ? `A key is on file, ending ${s.key.last4}. Type a new one to replace it.` : "Paste the key here"}
+                    />
+                    {s.key ? (
+                      <span className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                        <span className="flex items-center gap-1.5">
+                          <span className={`dot ${s.key.check ? (s.key.check.ok ? "dot-ok" : "dot-warn") : "dot-info"}`} aria-hidden="true" />
+                          On file since {fmtWhen(s.key.savedAt, f.timezone)}, ending {s.key.last4}.
+                        </span>
+                        <label className="flex items-center gap-2">
+                          <input type="checkbox" name={`keyRemove_${i}`} value="yes" className="h-4 w-4 accent-ember" />
+                          Remove the key on file
+                        </label>
+                      </span>
+                    ) : (
+                      <span className="hint">{VENDOR_KEY_HELP[s.platform] ?? "Each vendor issues its own key. Choose the platform to see how to ask for it."}</span>
+                    )}
+                    {s.key?.check && <span className={`mt-1 block text-xs ${s.key.check.ok ? "text-bone" : "text-warn"}`}>{s.key.check.text}</span>}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted">{store.backend === "pglite-memory" ? "This is the demo, which keeps nothing between visits, so keys are not stored here." : "Keys can be stored once the consultant passcode is set on this deployment."}</p>
+                )}
+              </div>
             </div>
           ))}
           <button type="submit" className="btn-primary">
             Save platforms
           </button>
         </form>
+        {(f.sensors ?? []).map((s, i) =>
+          s.key && s.platform === "Aroya" ? (
+            <form key={i} action={checkSensorKey} className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <input type="hidden" name="slug" value={f.slug} />
+              <input type="hidden" name="index" value={i} />
+              <button type="submit" className="btn-ghost">
+                Check the Aroya key
+              </button>
+              <p className="text-sm text-muted">Asks Aroya whether the key works and which rooms it can see.</p>
+            </form>
+          ) : null
+        )}
+        <p className="mt-4 max-w-3xl text-xs text-muted">
+          A stored key does not draw graphs yet. Pulling the readings is finished against the first real key for each vendor, because none of the three publishes what its readings look like without one. Until then, graphs come from an uploaded export on each room.
+        </p>
       </section>
 
       {/* ── The task list ── */}

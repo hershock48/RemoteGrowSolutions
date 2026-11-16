@@ -13,7 +13,9 @@ import { loadDashboard } from "@/lib/load";
 import { draftReport } from "@/lib/report";
 import { dayOf } from "@/lib/rules";
 import { DEFAULT_TARGETS, EQUIPMENT_CATEGORIES, SITE } from "@/lib/site";
+import { open, seal, secretsReady } from "@/lib/secret";
 import { newId, store } from "@/lib/store";
+import { checkAroyaKey } from "@/lib/vendors";
 import type { ActionItem, CalEvent, CallNote, Checkin, Cycle, EventKind, Facility, Phase, Readiness, Report, Room, RoomKind, Schedule, SensorConnection, TaskAuto, TaskTemplate, Targets, ZoneRead } from "@/lib/types";
 
 /**
@@ -368,20 +370,31 @@ export async function saveTasks(fd: FormData): Promise<void> {
 /* ------------------------------ sensor platforms ------------------------------ */
 
 /**
- * Which platform a facility runs and how RGS sees it. This deliberately has
- * no password box. A stored login to somebody else's platform is a liability
- * with nothing to use it yet; the two routes that work are the grower
- * inviting RGS as a viewer on their account, or the vendor issuing an API
- * key, and this records which one is in place and where the live graphs are.
+ * Which platform a facility runs and how the consultant sees it: the address
+ * of its live graphs, and the API key the vendor issued.
+ *
+ * There is no username or password box, and there will not be one: no vendor
+ * offers a way for another app to sign in with them. An API key is what all
+ * three issue instead. A key typed here is sealed before it is stored and is
+ * never sent back to the page. Leaving the box empty keeps the key on file;
+ * ticking "remove" deletes it. A deployment with no database (the demo)
+ * stores no keys at all.
  */
 export async function saveSensors(fd: FormData): Promise<void> {
   const { facility } = await gate(str(fd, "slug", 40));
   const base = `/f/${facility.slug}`;
+  const canStore = secretsReady() && store.backend !== "pglite-memory";
+  const before = facility.sensors ?? [];
   const sensors: SensorConnection[] = [];
   for (let i = 0; i < 4; i++) {
     const platform = str(fd, `platform_${i}`, 40);
     if (!platform) continue;
     const liveUrl = str(fd, `liveUrl_${i}`, 300);
+    // The key on file stays with its row only while the row is still the same platform.
+    const kept = before[i]?.platform === platform ? before[i].key : undefined;
+    const typed = str(fd, `key_${i}`, 400);
+    const remove = str(fd, `keyRemove_${i}`, 4) === "yes";
+    const key = typed && canStore ? { sealed: seal(typed), last4: typed.slice(-4), savedAt: Date.now() } : remove ? undefined : kept;
     sensors.push({
       platform,
       account: str(fd, `account_${i}`, 120),
@@ -389,11 +402,29 @@ export async function saveSensors(fd: FormData): Promise<void> {
       // Only an https link is ever rendered as a link.
       liveUrl: /^https:\/\/[^\s]+$/i.test(liveUrl) ? liveUrl : "",
       note: str(fd, `note_${i}`, 300),
+      ...(key ? { key } : {}),
     });
   }
   await store.saveFacility({ ...facility, sensors: sensors.length ? sensors : undefined, updatedAt: Date.now() });
   revalidatePath(base, "layout");
   redirect(`${base}/profile${q({ saved: "sensors" })}#sensors`);
+}
+
+/** Ask the vendor whether the key on file works. Aroya only: it is the one vendor whose check is documented in the open. */
+export async function checkSensorKey(fd: FormData): Promise<void> {
+  const { facility } = await gate(str(fd, "slug", 40));
+  const base = `/f/${facility.slug}`;
+  const i = Number(str(fd, "index", 2));
+  const row = facility.sensors?.[i];
+  if (!row?.key || row.platform !== "Aroya") redirect(`${base}/profile#sensors`);
+  const plain = open(row.key.sealed);
+  const check = plain
+    ? await checkAroyaKey(plain)
+    : { ok: false, text: "The key on file can no longer be read. Enter it again." };
+  const sensors = (facility.sensors ?? []).map((s, j) => (j === i && s.key ? { ...s, key: { ...s.key, check: { at: Date.now(), ...check } } } : s));
+  await store.saveFacility({ ...facility, sensors, updatedAt: Date.now() });
+  revalidatePath(base, "layout");
+  redirect(`${base}/profile${q({ saved: "keycheck" })}#sensors`);
 }
 
 /** A sensor export, uploaded as a file or pasted, drawn on the room page as a graph. */

@@ -136,10 +136,16 @@ export type TaskTemplate = { id: string; title: string; cadence: "weekdays" | "d
 export type TaskTick = { id: string; facilityId: string; roomId: string; taskId: string; period: string; at: number; by: "client" | "rgs" };
 
 /**
- * How RGS sees a facility's sensor platform. No passwords: the grower invites
- * RGS as a viewer, or the vendor issues an API key, and this records which.
+ * How the consultant sees a facility's sensor platform: a viewer invite, an
+ * address for the live graphs, or an API key the vendor issued.
+ *
+ * Never a username and password. No vendor offers a way for another app to
+ * sign in with them, so there is nowhere to send one. An API key is what the
+ * vendors issue for this: it is sealed before it is stored (lib/secret.ts)
+ * and the page only ever sees its last four characters.
  */
-export type SensorConnection = { platform: string; account: string; access: string; liveUrl: string; note: string };
+export type StoredKey = { sealed: string; last4: string; savedAt: number; check?: { at: number; ok: boolean; text: string } };
+export type SensorConnection = { platform: string; account: string; access: string; liveUrl: string; note: string; key?: StoredKey };
 
 /** A sensor export, uploaded as a file and drawn as a graph. Times are wall-clock ms. */
 export type SensorSeries = {

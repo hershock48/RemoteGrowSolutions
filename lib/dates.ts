@@ -27,6 +27,17 @@ export function todayIn(timeZone: string, now: Date = new Date()): string {
   }
 }
 
+/** Minutes since midnight on the wall clock of a timezone, right now. */
+export function minutesNowIn(timeZone: string, now: Date = new Date()): number {
+  try {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+    return (get("hour") % 24) * 60 + get("minute");
+  } catch {
+    return now.getUTCHours() * 60 + now.getUTCMinutes();
+  }
+}
+
 export function addDays(day: string, n: number): string {
   const d = new Date(`${day}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);

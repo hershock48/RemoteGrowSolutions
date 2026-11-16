@@ -90,6 +90,18 @@ runoff, the task list and the consultant's read sit beside the readings.
 VPD and CO2 now raise a flag against their setpoints like every other
 reading (`lib/rules.ts`), so the table and the status never disagree.
 
+## The room drawing, second version (2026-11-16)
+
+Kevin asked for the 3D drawings to be improved. `components/RoomVisual.tsx`
+is now a cutaway: benches on legs with a shadow under them, a two-row canopy
+on each, bar fixtures hung from rails with light falling on the canopy, a
+drip line down every bench in its feed zone's colour. Two things in it are
+new data. The plants are sized and coloured by the day of flower, so day 10
+and day 52 look different. The lights follow the lighting schedule: outside
+the lights-on window the room is drawn dark and the caption says so. The wall
+units and the door are decoration. It is still a fixed view, not a model that
+turns.
+
 ## Nothing here is rented
 
 | Usually rented | Here |
@@ -195,11 +207,12 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
   notes. The profile page shows the tier each facility lands in.
 - Onboarding fee for complex facilities, and the three-month minimum: both
   are stated as policy on `/pricing` with no number for the fee.
-- Which sensor platforms will grant API access. Growlink documents a
-  developer API on its Sprout plan and above; TrolMaster runs an API gateway
-  that issues keys on request for a monthly fee per device; no public Aroya
-  API was found (checked 2026-11-16). Until a facility has one, its graphs
-  come from an uploaded export and a link out to the live platform.
+- A real API key from each vendor a customer runs. All three issue them
+  (re-checked 2026-11-16; `lib/vendors.ts` has the sources). An earlier
+  version of this file said no public Aroya API was found. That was wrong:
+  Aroya publishes one, with the key issued by its customer support. Until a
+  facility's key is on file and the pull is finished against it, graphs come
+  from an uploaded export and a link out to the live platform.
 - The runoff video for `/guide`, and whether the written steps match what he
   shows in it. The steps between his rules are the ordinary method and are a
   draft until he has read them.
@@ -212,8 +225,8 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 
 ## What is not built
 
-- **Live sensor integration.** Nothing pulls readings from Aroya, Growlink or TrolMaster. A graph inside the app comes from an export the grower uploads; "live" is a link that opens the vendor's own dashboard. Each vendor needs its own connector and its own access (an API key issued to the facility), and none of that exists until a real facility has one to test against.
-- **Stored vendor logins.** Deliberately. The app has nothing that can use a third-party password, and holding one is a liability with no benefit. The profile records the platform and the route that works: a viewer invite to the consultant, or an API key.
+- **Pulling readings from a vendor.** A facility's API key can be stored (sealed, `lib/secret.ts`) and an Aroya key can be checked against Aroya, which answers whether it works and which rooms it sees. The readings themselves are not pulled yet for any vendor: Aroya's published schema does not describe what its chart endpoint returns, and Growlink and TrolMaster give their reference to key holders. That step is written against the first real key, never a guess. Until then a graph comes from an uploaded export, and "live" is a link to the vendor's own dashboard.
+- **Vendor usernames and passwords.** Never asked for. No vendor offers a way for another app to sign in with them; an API key is what each one issues instead.
 - **Video upload.** A canopy photo uploads (4 MB, when a Blob store is attached). A 30-second phone video is tens of megabytes and needs a direct-to-storage upload that is not built; the video line on the checklist is ticked by hand.
 - **Calls hosted in the app with notes written automatically.** Possible, and a project of its own: a calling provider for the room and the recording, a transcription service, a model to turn the transcript into notes (which needs an API key, against Kevin's standing rule), and recorded consent from everyone on the call. Today the consultant holds the call wherever he likes and writes the note.
 - **True 3D.** The room drawing is a fixed projected view. It does not rotate and it is not measured from the room.

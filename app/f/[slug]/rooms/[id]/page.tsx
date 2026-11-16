@@ -13,10 +13,10 @@ import { deleteEvent, endCycle, saveEvent, startCycle, toggleEvent, uploadSeries
 import { loadBoard } from "@/lib/board";
 import { requireFacility } from "@/lib/load";
 import { store } from "@/lib/store";
-import { addDays, diffDays, flowerDay, fmtDay, fmtWhen } from "@/lib/dates";
+import { addDays, diffDays, flowerDay, fmtDay, fmtWhen, minutesNowIn } from "@/lib/dates";
 import { nowOf } from "@/lib/now";
 import { evaluateRoom } from "@/lib/rules";
-import { buildSchedule, parseHHMM } from "@/lib/schedule";
+import { buildSchedule, isLit, parseHHMM } from "@/lib/schedule";
 import { ecSeries, rhSeries, runoffSeries, runReadings, tempSeries } from "@/lib/series";
 import { tally, URGENT_LINE } from "@/lib/tasks";
 import { vpdKpa } from "@/lib/vpd";
@@ -206,7 +206,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
       {/* ── The room and its profile ── */}
       <section className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_1fr]" aria-label="Room profile">
         <div className="card p-4 sm:p-5">
-          <RoomVisual room={room} tone={tone} />
+          <RoomVisual room={room} tone={tone} progress={cycle && day ? Math.min(1, day / Math.max(1, room.flowerDays)) : undefined} lit={isLit(room.schedule, minutesNowIn(facility.timezone))} />
           {flags.length > 0 && (
             <ul className="mt-3 space-y-0.5 border-t border-line pt-3 text-sm text-muted">
               {flags.map((f, i) => (

@@ -36,6 +36,18 @@ export function fmtClock(min: number): string {
   return `${p(h)}:${p(m)}${sec ? `:${p(sec)}` : ""}`;
 }
 
+/**
+ * Whether the lights are on at a wall-clock minute of the facility day.
+ * Undefined when the room has no lighting schedule, so the caller can leave
+ * the question out instead of guessing.
+ */
+export function isLit(s: Schedule | undefined, nowMin: number): boolean | undefined {
+  const on = parseHHMM(s?.lightsOn);
+  const off = parseHHMM(s?.lightsOff);
+  if (on === null || off === null || on === off) return undefined;
+  return (nowMin - on + DAY) % DAY < (off - on + DAY) % DAY;
+}
+
 export type ShotEvent = {
   phase: "P1" | "P2";
   n: number;
