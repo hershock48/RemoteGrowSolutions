@@ -7,7 +7,7 @@ import { loadDashboard, requireAdmin } from "@/lib/load";
 import { store } from "@/lib/store";
 import { todayIn, fmtWhen } from "@/lib/dates";
 import { quote, usd } from "@/lib/pricing";
-import { SITE } from "@/lib/site";
+import { levelOf, SITE } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Consultant", robots: { index: false, follow: false } };
 // The build has no passcode set, so the gate short-circuits before it reads a
@@ -96,7 +96,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<{ 
                       {f.name}
                     </Link>
                     <p className="text-xs text-muted">
-                      {f.flowerRooms} flower rooms · {f.lightsTotal} lights
+                      {f.flowerRooms} flower rooms · {f.lightsTotal} lights{levelOf(f.level) ? ` · ${levelOf(f.level)!.name} level` : " · level not set"}
                     </p>
                     <p className="text-xs text-muted">
                       {q.tier.name}, {usd(q.tier.monthly)}

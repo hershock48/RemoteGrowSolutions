@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: { default: `${SITE.name} - ${SITE.tagline}`, template: `%s - ${SITE.short}` },
   description:
-    "Subscription cultivation management for commercial grows: three check-ins a week, one call a week, a weekly report, a living crop calendar and exception-based review of every flower room.",
+    "Subscription cultivation management for commercial grows: daily data from every flower room, scheduled calls, a weekly report and exception-based review of every room.",
   openGraph: {
     type: "website",
     siteName: SITE.name,

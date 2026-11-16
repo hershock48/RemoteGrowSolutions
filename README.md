@@ -7,8 +7,8 @@ repository, the vercel.app address, the `RGS_` environment variables and the
 is Kevin's to do, with a redeploy.
 
 The operating system behind Jake's second business: subscription cultivation
-management for commercial grows, run remotely. Growers submit three check-ins a
-week per flower room, the software compares every reading to the room's own
+management for commercial grows, run remotely. Growers enter every flower
+room's data daily, the software compares every reading to the room's own
 targets and flags what is outside, the consultant reviews the flagged rooms,
 spends an hour on the phone, and a weekly report goes out. Built from his
 planning notes of November 2026 (the thread he forwarded to Kevin on
@@ -61,10 +61,69 @@ His email, point by point, and where each landed.
 | Mobile friendly | Checked at 320, 375, 768 and 1440. |
 | Host calls in the app with notes generated automatically? | A question, answered in the hand-off note and under "What is not built". Not built. |
 
-Two conflicts this round surfaced, both left as they were until Jake rules:
+Two conflicts this round surfaced. Jake ruled on both the same day; see the next section.
 
-- **Daily or three a week.** His sheet is Monday to Friday, so the default task list is weekdays. The public pages and `lib/pricing.ts` still promise three check-ins a week. One of them has to move.
-- **TrolMaster.** He now names it for temperature and RH graphs. The requirements list on the public page still says TrolMaster sensors are not supported, which was said about substrate sensors. The wording needs his eye.
+## His answers of 2026-11-16, and what each changed
+
+Kevin forwarded the open-items document and Jake answered five of its questions.
+
+| He said | What changed |
+| --- | --- |
+| "The client must provide data daily." | Every page that promised three check-ins a week says daily (`lib/site.ts`, `lib/pricing.ts`, the page descriptions). The missed-entry rule followed: a room is flagged the morning after a weekday with no entry (`weekdaysMissed` in `lib/rules.ts`). It used to wait until a room had been quiet for more than three days. |
+| "I have 3 service tiers. Remote - once per week call and review. Middle - 3 times per week review. 1 day call. Top tier - daily review and multiple calls per week." | `SERVICE_LEVELS` in `lib/site.ts`. The public page has a section for them, the consultant sets a facility's level on its profile, and the grower sees it on Home and on the profile. They are called levels on screen because "tier" already means facility size on the pricing page. The claim "the same service at every tier" is gone from every page. |
+| Video: "record a video with phone and attach it so I can view. It should be associated with a room. They would have a tab that says upload a video for each day when they enter in runoff data" | Built. See "The canopy video" below. |
+| TrolMaster: "only trolmaster substrate sensors are not permitted by service as sole substrate sensor provider as they're not reliable. Their environmental sensors are approved." | The requirement now says TrolMaster substrate sensors are not accepted as a room's only substrate sensors, and that TrolMaster environmental sensors are approved. His reason, "not reliable", is left off the public page: it is a statement about a named company, and the rule reads complete without it. |
+| "Yes to recording calls." | Recorded here. He did not say which of the two setups in the document he wants, so nothing is built. Kevin's recommendation stands: a recording dropped into the call notes form and written out as a transcript, before any call is hosted in the app. |
+| "Try this for Aroya API login", with an email address and a password | Not used and not stored anywhere. Aroya's API takes a key that Aroya support issues, not a sign-in, so there is nowhere in this app for a password to go. The key is still the one thing the live graphs wait on. |
+
+### The canopy video
+
+The grower picks a video on the entry form, on the day they are entering, and
+it goes from the phone straight to storage. It never passes through this
+app's server, because a request through the server stops near 4 MB and a phone
+video runs 30 to 200 MB.
+
+- `lib/video.ts`: the limit (300 MB), the three types (MP4, MOV, WebM) and the
+  path a video is stored under: facility, room, day.
+- `app/api/video/route.ts` signs a one-hour permission for exactly one path,
+  and only for somebody signed in to that facility, for a room of theirs, for
+  a day that has happened. Storage enforces the size and the types.
+- `components/VideoField.tsx` uploads the moment a file is picked, in parts,
+  with a progress bar. The Save button waits while it runs. An upload that
+  sends nothing for 45 seconds is called off with a sentence.
+- `attachVideo` in `app/f/actions.ts` does not believe the address the
+  browser hands back. It asks storage about it with the site's own key, which
+  only answers for files in the site's own store, and the file must sit under
+  that room and day and be a video. Then it writes the address on the day's
+  entry. A day with no entry yet gets one that holds only the video.
+- A retake replaces the earlier video and removes it from storage. Removing
+  the video removes it from storage too.
+- The room page plays it inside the day's entry, and the canopy line on the
+  checklist ticks from a video the same as from a photo.
+
+The store is a public one, like the photo's: the file is served from an
+address that ends in 24 random characters, to anyone who has the address. A
+private store would mean streaming every playback through this app.
+
+**Checked** on a local production build against a stand-in for storage, by a
+scripted browser at phone width: 32 checks covering the upload, the progress,
+the replace, the removal, the refusals and an outage. **Not checked:** the
+real store. The live site has no Blob store attached, so on the live site the
+form says video is not switched on. It has also not been tried from a real
+iPhone, which uploads by a different browser mechanism than the one tested
+(the storage library picks it; this app's code is the same either way).
+
+Still open from this round:
+
+- **Does daily include Saturday and Sunday?** His sheet runs Monday to Friday,
+  so the checklist and the missed-entry rule are weekdays. If daily means
+  seven days, the default list and one test in `weekdaysMissed` change.
+- **Names for the levels.** "Middle" and "Top" are his working words.
+- **What a level costs.** `lib/pricing.ts` prices by facility size alone. No
+  page ties a level to a price, so a reader of the pricing page cannot tell
+  which level the four prices buy.
+- **What the level should drive in the app.** Today it is a label. It could
+  set how often the consultant index asks for a review.
 
 ## The Aroya reference (2026-11-16, later the same day)
 
@@ -252,7 +311,7 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 - The runoff video for `/guide`, and whether the written steps match what he
   shows in it. The steps between his rules are the ordinary method and are a
   draft until he has read them.
-- Daily against three a week, and the TrolMaster wording: both above.
+- Whether daily includes the weekend, names and prices for the three levels: all above, under his answers of 2026-11-16.
 - Billing. His notes assume Stripe subscriptions; Stripe's restricted list
   covers cultivation education, and this is cultivation management. Settle
   the processor before designing the billing layer. Nothing here takes money.
@@ -263,7 +322,7 @@ See `.env.example`. Three values, all set by Kevin in the Vercel dashboard:
 
 - **Pulling readings from a vendor.** A facility's API key can be stored (sealed, `lib/secret.ts`) and an Aroya key can be checked against Aroya, which answers whether it works and which rooms it sees. The readings themselves are not pulled yet for any vendor: Aroya's published schema does not describe what its chart endpoint returns, and Growlink and TrolMaster give their reference to key holders. That step is written against the first real key, never a guess. Until then a graph comes from an uploaded export, and "live" is a link to the vendor's own dashboard.
 - **Vendor usernames and passwords.** Never asked for. No vendor offers a way for another app to sign in with them; an API key is what each one issues instead.
-- **Video upload.** A canopy photo uploads (4 MB, when a Blob store is attached). A 30-second phone video is tens of megabytes and needs a direct-to-storage upload that is not built; the video line on the checklist is ticked by hand.
+- **Video upload on the live site.** The upload is built (see "The canopy video"), and it is off until a Blob store is attached to the hosting, the same switch the canopy photo waits on. Until then the video line on the checklist is ticked by hand.
 - **Calls hosted in the app with notes written automatically.** Possible, and a project of its own: a calling provider for the room and the recording, a transcription service, a model to turn the transcript into notes (which needs an API key, against Kevin's standing rule), and recorded consent from everyone on the call. Today the consultant holds the call wherever he likes and writes the note.
 - **True 3D.** The room drawing is a fixed projected view. It does not rotate and it is not measured from the room.
 - Transcription of calls. The consultant writes the note.
@@ -283,7 +342,7 @@ both set and every gated route re-run; the record below is from that run.
 - [x] Zero accessibility violations at 390 and 1440 on 21 routes (plus a deliberate 404 probe). Findings fixed at the class and re-run: a `/70` opacity on the estimator's tier label, sideways-scrolling tables without keyboard focus (every table), and a grid column on the room page that let the reading table push the page to 780px on a phone.
 - [x] Independent review (a second session, read-only) on 2026-11-04 found eleven issues; all fixed: two open redirects (`next` on the consultant login, `back` on the calendar toggle); past-due events linking to an edit form that could not find them; flips and harvests counting as overdue tasks; the overdue summary naming the newest task as the oldest; "latest reading" chosen by submit time rather than reading day, so a back-filled entry drove the rules; facility passcodes hashed with a single SHA-256 (now scrypt); check-in photos stored with the browser's content type at guessable URLs; facility creation not validating the timezone; the public inquiry form with no rate limit; archived rooms dropped from an event on edit.
 - [x] Zero console errors, zero 4xx on every route except the 404 probe.
-- [ ] `grep -rn PLACEHOLDER`: `SITE.email`, and `GUIDE.videoUrl` with the guide's written steps, all listed above.
+- [ ] `grep -rn PLACEHOLDER`: `SITE.email`, `GUIDE.videoUrl` with the guide's written steps, the names and prices of the three service levels, and whether daily includes the weekend, all listed above.
 - [x] Every form submitted in a real browser: inquiry, both logins, room profile, check-in (with the live runoff figure matching the server's), calendar add and toggle, report draft and approve, call write-up with a dated action landing on the calendar, facility creation, passcode reset.
 - [ ] Remote data source verified on the deployment: needs the Neon database attached first.
 - [x] Checked at 320, 390, 768 and 1440: no horizontal overflow on 13 routes at 320 and 768, 22 at 390 and 1440.
@@ -313,5 +372,5 @@ both set and every gated route re-run; the record below is from that run.
 4. Create Jake's first facility at `/admin/facilities/new`; tell the grower the
    sign-in name and passcode by phone.
 5. Jake: name the host. Attach the domain, then update `SITE.url`.
-6. Exercise one full week on the deployment: three check-ins, a call written
+6. Exercise one full week on the deployment: five weekdays of entries in every room, a call written
    up, a report drafted and approved, before any paying facility.

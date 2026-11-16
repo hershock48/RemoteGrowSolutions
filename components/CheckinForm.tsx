@@ -1,5 +1,6 @@
 "use client";
 
+import VideoField from "./VideoField";
 import { useState } from "react";
 import { saveCheckin } from "@/app/f/actions";
 import { irrigation, ml, pct } from "@/lib/irrigation";
@@ -67,6 +68,10 @@ export default function CheckinForm({
   const t = room.targets;
   const hasSchedule = scheduleMl > 0;
   const [photoNote, setPhotoNote] = useState("");
+  // The video saves on its own (components/VideoField.tsx). While one is going
+  // up the Save button waits, and after it lands the form knows the entry's new save time.
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [seen, setSeen] = useState(existing?.at ?? 0);
   const [live, setLive] = useState<{ daily: number; runoff: number | null }>({
     daily: hasSchedule ? scheduleMl : (existing?.feedMl ?? 0),
     runoff: existing?.runoffPct ?? null,
@@ -142,7 +147,7 @@ export default function CheckinForm({
       <input type="hidden" name="roomId" value={room.id} />
       <input type="hidden" name="day" value={day} />
       {/* The save time of the entry these boxes were filled from. See saveCheckin. */}
-      <input type="hidden" name="seen" value={existing?.at ?? 0} />
+      <input type="hidden" name="seen" value={seen} />
 
       {err === "date" && <p className="error">That day has not happened yet, or is not a date.</p>}
       {err === "runoff" && <p className="error">One of the runoff reads is not a number.</p>}
@@ -265,12 +270,12 @@ export default function CheckinForm({
           ) : (
             <p className="text-sm text-muted">Photo uploads are not switched on for this deployment yet. The entry saves without one.</p>
           )}
-          <p className="mt-2 text-xs text-muted">Video does not upload here yet. Send the 30-second canopy video the way you do now and tick that line on the room page.</p>
         </div>
+        <VideoField slug={slug} roomId={room.id} day={day} enabled={photos} initialUrl={existing?.videoUrl} onBusy={setVideoBusy} onSaved={setSeen} />
       </fieldset>
 
-      <button type="submit" className="btn-primary w-full sm:w-auto">
-        Save {dayOfFlower ? `day ${dayOfFlower}` : "entry"}
+      <button type="submit" className="btn-primary w-full sm:w-auto" disabled={videoBusy}>
+        {videoBusy ? "Waiting for the video" : `Save ${dayOfFlower ? `day ${dayOfFlower}` : "entry"}`}
       </button>
     </form>
   );

@@ -7,7 +7,7 @@ import { EXPANSION_ALLOWANCE, POLICIES, TIERS, usd } from "@/lib/pricing";
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "Four subscription tiers from $2,000 to $8,000 a month, set by flowering light count or flower room count, whichever lands higher. The same weekly service at every tier.",
+    "Four subscription tiers from $2,000 to $8,000 a month, set by flowering light count or flower room count, whichever lands higher.",
 };
 
 export default function Pricing() {

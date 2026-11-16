@@ -116,11 +116,11 @@ export const POLICIES = [
     body: "Light count is every installed flowering fixture. Veg, mother and under-canopy lights do not count. Room count is every independently controlled flower room. Pricing follows the contracted footprint, not what happened to be running this week.",
   },
   {
-    name: "The same service at every tier",
-    body: "Three check-ins a week, one 60-minute call a week, the dashboard, the calendar and the weekly report. Tiers differ by facility size and analysis depth, not by access.",
+    name: "Three levels of service",
+    body: "Remote, Middle and Top differ in how often your rooms are reviewed and how often we talk. Your team enters data daily at every level, and every level has the dashboard, the room checklists and the weekly report.",
   },
   {
     name: "Commitment",
-    body: "Three months to start. An onboarding fee applies to complex facilities. Calls outside the weekly hour are scheduled and quoted.",
+    body: "Three months to start. An onboarding fee applies to complex facilities. Calls outside your level's schedule are scheduled and quoted.",
   },
 ] as const;

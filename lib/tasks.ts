@@ -47,7 +47,7 @@ export const AUTO_LABEL: Record<TaskTemplate["auto"], string> = {
   none: "Ticked by hand",
   environment: "Ticks when temperature and RH are entered or an export is uploaded",
   runoff: "Ticks when every feed zone has its runoff reads",
-  photo: "Ticks when a canopy photo is uploaded",
+  photo: "Ticks when a canopy video or photo is uploaded",
   notes: "Ticks when observations are written",
   substrate: "Ticks when dryback is entered or a substrate export is uploaded",
   assigned: "Ticks when nothing assigned to the room is still open",
@@ -140,7 +140,7 @@ export function taskStates(tasks: TaskTemplate[], ctx: TaskContext): TaskState[]
         break;
       }
       case "photo":
-        auto = ctx.photosOn && entries.some((e) => !!e.photoUrl);
+        auto = ctx.photosOn && entries.some((e) => !!e.photoUrl || !!e.videoUrl);
         break;
       case "notes":
         auto = entries.some((e) => e.observations.trim().length > 0);

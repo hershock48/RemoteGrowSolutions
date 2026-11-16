@@ -8,7 +8,7 @@ import { VENDOR_KEY_HELP } from "@/lib/vendors";
 import { fmtWhen } from "@/lib/dates";
 import { quote, usd } from "@/lib/pricing";
 import type { SensorConnection } from "@/lib/types";
-import { ACCESS_OPTIONS, EQUIPMENT_CATEGORIES, LIVE_PLATFORMS, READINESS } from "@/lib/site";
+import { ACCESS_OPTIONS, EQUIPMENT_CATEGORIES, levelOf, LIVE_PLATFORMS, READINESS, SERVICE_LEVELS } from "@/lib/site";
 import { AUTO_LABEL, DEFAULT_TASKS } from "@/lib/tasks";
 
 export const metadata: Metadata = { title: "Facility profile" };
@@ -102,6 +102,33 @@ export default async function Profile({ params, searchParams }: { params: Promis
                 <input id="momRooms" name="momRooms" type="number" inputMode="numeric" min={0} className="field" defaultValue={f.momRooms} />
               </F>
             </div>
+          </fieldset>
+
+          <fieldset className="card p-6">
+            <legend className="eyebrow px-1">Level of service</legend>
+            {viewer === "rgs" ? (
+              <div className="mt-4">
+                <label className="label" htmlFor="level">
+                  Level
+                </label>
+                <select id="level" name="level" className="field" defaultValue={f.level ?? ""}>
+                  <option value="">Not set</option>
+                  {SERVICE_LEVELS.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}: {l.reviews} {l.calls}
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">The grower sees this on the home page and here. Data is entered daily at every level.</span>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <p className="font-semibold text-bone">{levelOf(f.level)?.name ?? "Not set yet"}</p>
+                <p className="mt-1 text-sm text-muted">
+                  {levelOf(f.level) ? `${levelOf(f.level)!.reviews} ${levelOf(f.level)!.calls} ` : ""}Your team enters every room&apos;s readings daily.
+                </p>
+              </div>
+            )}
           </fieldset>
 
           <fieldset className="card p-6">

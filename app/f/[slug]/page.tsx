@@ -10,7 +10,7 @@ import { store } from "@/lib/store";
 import { addDays, diffDays, fmtDay, minutesNowIn } from "@/lib/dates";
 import { isLit } from "@/lib/schedule";
 import { timeline } from "@/lib/series";
-import { READINESS } from "@/lib/site";
+import { levelOf, READINESS } from "@/lib/site";
 import { tally } from "@/lib/tasks";
 
 export const metadata: Metadata = { title: "Home" };
@@ -42,6 +42,7 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
   const others = d.rooms.filter((r) => r.kind !== "flower");
   const facilityWide = d.events.filter((e) => !e.roomId && !e.doneAt && diffDays(today, e.date) >= 0).slice(0, 4);
   const ready = READINESS[facility.readiness];
+  const level = levelOf(facility.level);
   const sensors = facility.sensors ?? [];
   const nowMin = minutesNowIn(facility.timezone);
 
@@ -63,6 +64,11 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
         <span className="font-semibold text-bone">{ready.name}.</span>
         <span>{facility.readinessNote || ready.body}</span>
       </p>
+      {level && (
+        <p className="mt-1 text-sm text-muted">
+          <span className="font-semibold text-bone">{level.name} level.</span> {level.reviews} {level.calls}
+        </p>
+      )}
 
       {/* ── The facility, first, on both sides ── */}
       <section className="card mt-6 grid gap-x-10 gap-y-5 p-5 sm:p-6 md:grid-cols-[1.2fr_1fr]" aria-label="Facility profile">

@@ -32,12 +32,12 @@ export const SITE = {
 
 export const INCLUDED = [
   {
-    name: "Three check-ins a week",
-    body: "Each flower room reports environment, feed, runoff and a canopy photo three times a week. Three to five minutes a room from a phone. Sensor platforms fill what they can.",
+    name: "Daily data from every room",
+    body: "Your team enters each flower room's environment, feed and runoff by feed zone every day, with a short canopy video. A few minutes a room from a phone. Sensor platforms fill what they can.",
   },
   {
-    name: "One hour a week, on the phone",
-    body: "A scheduled 60-minute call: last week's actions, the flagged rooms, what is coming, your questions, and who does what by when.",
+    name: "Scheduled calls",
+    body: "A call every week at every level, and more of them at the top one: last week's actions, the flagged rooms, what is coming, your questions, and who does what by when.",
   },
   {
     name: "A weekly written report",
@@ -57,6 +57,29 @@ export const INCLUDED = [
   },
 ] as const;
 
+/**
+ * THE THREE LEVELS. Jake, 2026-11-16: "I have 3 service tiers. Remote - once
+ * per week call and review. Middle - 3 times per week review. 1 day call. Top
+ * tier - daily review and multiple calls per week." And, at every level: "The
+ * client must provide data daily."
+ *
+ * They are called levels on screen because "tier" already means facility size
+ * on the pricing page, and one word for two things is how a customer ends up
+ * quoted the wrong one.
+ *
+ * PLACEHOLDER: "Middle" and "Top" are his working words, not names he has
+ * chosen for a customer to read. PLACEHOLDER: what a level does to the price
+ * is not stated anywhere. lib/pricing.ts prices by facility size alone, and
+ * no page claims a price for a level.
+ */
+export const SERVICE_LEVELS = [
+  { id: "remote", name: "Remote", reviews: "Your rooms are reviewed once a week.", calls: "One call a week." },
+  { id: "middle", name: "Middle", reviews: "Your rooms are reviewed three times a week.", calls: "One call a week." },
+  { id: "top", name: "Top", reviews: "Your rooms are reviewed every day.", calls: "Several calls a week." },
+] as const;
+export type ServiceLevelId = (typeof SERVICE_LEVELS)[number]["id"];
+export const levelOf = (id: string | undefined) => SERVICE_LEVELS.find((l) => l.id === id);
+
 export const ADVISORY = {
   title: "Full-cycle advisory, included",
   body: "Flowering gets active weekly management. Propagation, mother plants and veg get advisory oversight at no additional cost: rooting consistency, mother health and replacement schedules, growth rates and uniformity, transplant readiness and the hand-off into flower. Plants entering flower set the ceiling on what flower management can do, so we watch the whole facility and manage the rooms that pay.",
@@ -75,18 +98,18 @@ export const ADVISORY = {
 } as const;
 
 export const WEEK = [
-  { who: "Grower", what: "Submits three check-ins a week per room. Sensors fill in what they can." },
+  { who: "Grower", what: "Enters every room's readings each day. Sensors fill in what they can." },
   { who: "Software", what: "Calculates runoff and daily volume, compares every reading to the room's own targets, flags what is outside and what did not arrive." },
-  { who: "Consultant", what: "Reviews the flagged rooms and the trends, not every number." },
-  { who: "Both", what: "One hour on the phone: decisions, coaching, action items with owners and dates." },
+  { who: "Consultant", what: "Reviews the flagged rooms and the trends, not every number. Once a week, three times a week or daily, by level." },
+  { who: "Both", what: "On the phone: decisions, coaching, action items with owners and dates." },
   { who: "Software, then consultant", what: "The weekly report is drafted from the data and the call, read, edited and approved before it goes out." },
 ] as const;
 
 export const REQUIREMENTS = [
   "Continuous temperature and RH monitoring in every independently controlled flower room.",
-  "Substrate water content and EC sensors with representative placement. Aroya, Pinnacle, Growlink or equivalent; TrolMaster sensors are not supported.",
+  "Substrate water content and EC sensors with representative placement: Aroya, Pinnacle, Growlink or equivalent. TrolMaster substrate sensors are not accepted as a room's only substrate sensors. TrolMaster environmental sensors are approved.",
   "Measurable irrigation delivery and runoff volume, and a consistent EC and pH procedure.",
-  "A named person responsible for the three weekly submissions.",
+  "A named person responsible for the daily entries.",
   "Reliable internet in the facility and the ability to share historical sensor data.",
 ] as const;
 

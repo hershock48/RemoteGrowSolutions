@@ -1,5 +1,5 @@
 import type { CalEvent, Checkin, Cycle, Room } from "./types";
-import { addDays, diffDays, flowerDay } from "./dates";
+import { addDays, diffDays, flowerDay, fmtDay } from "./dates";
 import { vpdKpa } from "./vpd";
 
 /**
@@ -31,8 +31,26 @@ export type Flag = {
   day?: string;
 };
 
-/** Three check-ins a week means a gap longer than this is a missed submission. */
-export const MISSING_AFTER_DAYS = 3;
+/**
+ * WHEN A DAY IS MISSED. Data is due daily (Jake, 2026-11-16: "The client must
+ * provide data daily"). Until then the rule was three check-ins a week and a
+ * room went quiet for more than three days before anything was said.
+ *
+ * His laminated sheet runs Monday to Friday, so a day is missed when it was a
+ * weekday, it is over, and it has no entry. Saturday and Sunday never count
+ * against a room, and today never does, because today is not over.
+ * PLACEHOLDER: whether "daily" includes the weekend has been asked and not
+ * answered. If it does, drop the weekday test below.
+ */
+export function weekdaysMissed(lastDay: string, today: string): string[] {
+  const out: string[] = [];
+  // Sixty days is past any run's tolerance, and it bounds the loop on a bad date.
+  for (let d = addDays(lastDay, 1), i = 0; d < today && i < 60; d = addDays(d, 1), i++) {
+    const dow = new Date(`${d}T12:00:00Z`).getUTCDay();
+    if (dow !== 0 && dow !== 6) out.push(d);
+  }
+  return out;
+}
 /** How far ahead a milestone shows on the list. */
 export const LOOKAHEAD_DAYS = 7;
 /** A change in runoff percentage this large against the prior average is worth a sentence. */
@@ -65,13 +83,13 @@ export function evaluateRoom({ room, cycle, checkins, events, today }: RoomInput
     if (!latest) {
       flags.push({ ...base, severity: "missing", code: "no-checkin", text: "No check-in recorded this cycle." });
     } else {
-      const gap = diffDays(latest.day, today);
-      if (gap > MISSING_AFTER_DAYS) {
+      const missed = weekdaysMissed(latest.day, today);
+      if (missed.length) {
         flags.push({
           ...base,
           severity: "missing",
           code: "stale",
-          text: `Last check-in was ${gap} days ago.`,
+          text: missed.length === 1 ? `No entry on ${fmtDay(missed[0], { weekday: "long" })}.` : `No entry for ${missed.length} weekdays. The last one was ${fmtDay(latest.day, { weekday: "short", month: "short", day: "numeric" })}.`,
           day: latest.day,
         });
       }

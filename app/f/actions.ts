@@ -12,9 +12,10 @@ import { colsOfKind, parseSensorCsv } from "@/lib/sensorcsv";
 import { loadDashboard } from "@/lib/load";
 import { draftReport } from "@/lib/report";
 import { dayOf } from "@/lib/rules";
-import { DEFAULT_TARGETS, EQUIPMENT_CATEGORIES, SITE } from "@/lib/site";
+import { DEFAULT_TARGETS, EQUIPMENT_CATEGORIES, SERVICE_LEVELS, SITE } from "@/lib/site";
 import { open, seal, secretsReady } from "@/lib/secret";
 import { newId, store } from "@/lib/store";
+import { videoPrefix } from "@/lib/video";
 import { checkAroyaKey } from "@/lib/vendors";
 import type { ActionItem, CalEvent, CallNote, Checkin, Cycle, EventKind, Facility, Phase, Readiness, Report, Room, RoomKind, Schedule, SensorConnection, TaskAuto, TaskTemplate, Targets, ZoneRead } from "@/lib/types";
 
@@ -299,7 +300,7 @@ export async function saveCheckin(fd: FormData): Promise<void> {
   const agg = zones.length ? runoffFromZones(zones) : legacyRunoff;
 
   // Everything was cleared: the day has no entry any more.
-  if (existing && Object.keys(readings).length === 0 && zones.length === 0 && !observations && !hasPhoto && !existing.photoUrl && agg.runoffEc === undefined && agg.runoffMl === undefined) {
+  if (existing && Object.keys(readings).length === 0 && zones.length === 0 && !observations && !hasPhoto && !existing.photoUrl && !existing.videoUrl && agg.runoffEc === undefined && agg.runoffMl === undefined) {
     await store.deleteCheckin(existing.id);
     revalidatePath(base, "layout");
     redirect(`${base}/rooms/${room.id}${q({ saved: "cleared" })}#tasks`);
@@ -334,6 +335,8 @@ export async function saveCheckin(fd: FormData): Promise<void> {
     zones: zones.length ? zones : undefined,
     observations,
     photoUrl: existing?.photoUrl,
+    // The video is attached on its own, by attachVideo, and a save of the boxes never drops it.
+    videoUrl: existing?.videoUrl,
     submittedBy: viewer,
   };
 
@@ -358,6 +361,94 @@ export async function saveCheckin(fd: FormData): Promise<void> {
   await store.saveCheckin(checkin);
   revalidatePath(base, "layout");
   redirect(`${base}/rooms/${room.id}${q({ saved: "checkin" })}#tasks`);
+}
+
+/* ------------------------------ the canopy video ------------------------------ */
+
+type VideoResult = { ok: true; at: number; url: string | null } | { ok: false; error: string };
+type VideoInput = { slug: string; roomId: string; day: string; url?: string };
+
+/** The readings an entry can hold. An entry with none of these, no words and no files is no entry. */
+const HELD = ["tempF", "rh", "ppfd", "co2", "feedEc", "feedPh", "shotMin", "shotsPerDay", "substrateWc", "substrateEc", "dryback", "runoffEc", "runoffPh", "runoffMl"] as const;
+const bare = (c: Checkin) => HELD.every((k) => c[k] === undefined) && !c.zones?.length && !c.observations && !c.photoUrl && !c.videoUrl;
+
+async function videoGate(input: VideoInput): Promise<{ error: string } | { facility: Facility; viewer: Viewer; room: Room; day: string }> {
+  const { facility, viewer, today } = await gate(String(input?.slug ?? "").slice(0, 40));
+  const room = await store.room(String(input?.roomId ?? "").slice(0, 40));
+  const day = String(input?.day ?? "").slice(0, 10);
+  if (!room || room.facilityId !== facility.id) return { error: "That room is not part of this facility." };
+  if (!isISODate(day) || day > today) return { error: "That day has not happened yet." };
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return { error: "Video uploads are not switched on for this site." };
+  // The storage library retries a failing request ten times, which is minutes. Two is enough to ride out a blip.
+  process.env.VERCEL_BLOB_RETRIES ??= "2";
+  return { facility, viewer, room, day };
+}
+
+/**
+ * Write a finished upload on the room's day. Called by the browser, so the
+ * address it sends is not believed: storage is asked about it with OUR key,
+ * which only answers for files in our own store, and the file has to sit
+ * under this facility, this room and this day and be a video. A day with no
+ * entry yet gets one that holds only the video.
+ */
+export async function attachVideo(input: VideoInput): Promise<VideoResult> {
+  const g = await videoGate(input);
+  if ("error" in g) return { ok: false, error: g.error };
+  const { facility, viewer, room, day } = g;
+  const { head, del } = await import("@vercel/blob");
+  let stored: { url: string; pathname: string; contentType: string };
+  try {
+    stored = await head(String(input?.url ?? "").slice(0, 600), { abortSignal: AbortSignal.timeout(8000) });
+  } catch {
+    return { ok: false, error: "The video did not reach storage. Pick it again." };
+  }
+  if (!stored.pathname.startsWith(videoPrefix(facility.slug, room.id, day)) || !stored.contentType.startsWith("video/")) {
+    return { ok: false, error: "That file does not belong to this room and day." };
+  }
+
+  const existing = await store.checkinForDay(room.id, day);
+  const replaced = existing?.videoUrl;
+  const at = Date.now();
+  let checkin: Checkin;
+  if (existing) checkin = { ...existing, videoUrl: stored.url, at };
+  else {
+    const cycle = await store.activeCycle(room.id);
+    const inRun = cycle && day >= cycle.flipDate ? cycle : null;
+    checkin = { id: `chk_${room.id}_${day}`, facilityId: facility.id, roomId: room.id, cycleId: inRun?.id, at, day, dayOfFlower: dayOf(inRun, day), observations: "", videoUrl: stored.url, submittedBy: viewer };
+  }
+  await store.saveCheckin(checkin);
+  // The one it replaces is removed from storage, or every retake would be kept and paid for.
+  if (replaced && replaced !== stored.url) {
+    try {
+      await del(replaced, { abortSignal: AbortSignal.timeout(8000) });
+    } catch {
+      /* an orphan in storage costs pennies; the entry is right */
+    }
+  }
+  revalidatePath(`/f/${facility.slug}`, "layout");
+  return { ok: true, at, url: stored.url };
+}
+
+/** Take the video off a day. If the video was all the day held, the day has no entry afterwards. */
+export async function removeVideo(input: VideoInput): Promise<VideoResult> {
+  const g = await videoGate(input);
+  if ("error" in g) return { ok: false, error: g.error };
+  const { facility, room, day } = g;
+  const existing = await store.checkinForDay(room.id, day);
+  if (!existing?.videoUrl) return { ok: true, at: existing?.at ?? 0, url: null };
+  const { del } = await import("@vercel/blob");
+  try {
+    await del(existing.videoUrl, { abortSignal: AbortSignal.timeout(8000) });
+  } catch {
+    return { ok: false, error: "Storage did not answer, so the video is still there. Try again." };
+  }
+  const at = Date.now();
+  const next: Checkin = { ...existing, at };
+  delete next.videoUrl;
+  if (bare(next)) await store.deleteCheckin(existing.id);
+  else await store.saveCheckin(next);
+  revalidatePath(`/f/${facility.slug}`, "layout");
+  return { ok: true, at: bare(next) ? 0 : at, url: null };
 }
 
 /* ------------------------------ the task list ------------------------------ */
@@ -627,6 +718,9 @@ export async function saveProfile(fd: FormData): Promise<void> {
     const r = str(fd, "readiness", 12) as Readiness;
     if (["qualified", "conditional", "restricted"].includes(r)) next.readiness = r;
     next.readinessNote = str(fd, "readinessNote", 1000);
+    // The level of service is the consultant's to set. An empty choice clears it.
+    const level = str(fd, "level", 10);
+    if (fd.has("level")) next.level = SERVICE_LEVELS.some((l) => l.id === level) ? (level as Facility["level"]) : undefined;
   }
   await store.saveFacility(next);
   revalidatePath(base, "layout");

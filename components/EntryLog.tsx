@@ -117,6 +117,15 @@ export default function EntryLog({ checkins, timezone, limit = 40, editBase }: {
                 )}
               </p>
             )}
+            {c.videoUrl && (
+              <div className="mt-3">
+                {/* preload="none": a log of sixteen days must not start sixteen downloads. */}
+                <video controls preload="none" playsInline src={c.videoUrl} className="aspect-video w-full max-w-md rounded-lg border border-line bg-black" aria-label={`Canopy video, ${c.day}`} />
+                <a href={c.videoUrl} target="_blank" rel="noopener" className="mt-1 inline-block text-sm text-flare hover:underline">
+                  Open the canopy video on its own
+                </a>
+              </div>
+            )}
           </article>
         );
       })}

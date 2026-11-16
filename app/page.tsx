@@ -5,12 +5,12 @@ import Footer from "@/components/Footer";
 import Estimator from "@/components/Estimator";
 import { submitInquiry } from "./actions";
 import { TIERS, usd } from "@/lib/pricing";
-import { ADVISORY, INCLUDED, REQUIREMENTS, SENSOR_PLATFORMS, SITE, WEEK } from "@/lib/site";
+import { ADVISORY, INCLUDED, REQUIREMENTS, SENSOR_PLATFORMS, SERVICE_LEVELS, SITE, WEEK } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: `${SITE.name} - ${SITE.tagline}`,
   description:
-    "Subscription cultivation management for commercial grows. Three check-ins a week, one call a week, a weekly report, a living crop calendar, and a dashboard that shows the rooms outside their own targets.",
+    "Subscription cultivation management for commercial grows. Daily data from every flower room, scheduled calls, a weekly report, and a dashboard that shows the rooms outside their own targets.",
 };
 
 type SP = Promise<{ sent?: string; err?: string }>;
@@ -29,7 +29,7 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
               Your flower rooms, reviewed every week by <span className="text-flare">someone who runs rooms</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-bone/85">
-              {SITE.name} is a subscription. Your team submits three short check-ins a week per room. The
+              {SITE.name} is a subscription. Your team enters each room&apos;s readings every day. The
               software compares every reading to the room&apos;s own targets and flags what is outside. Your consultant
               reviews the flagged rooms, spends an hour with you on the phone, and you get a written report of the week
               behind and the week ahead.
@@ -48,12 +48,27 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
         {/* ── What you get ── */}
         <section id="included" className="wrap mt-24 scroll-mt-24 sm:mt-32">
           <p className="eyebrow">Every subscription includes</p>
-          <h2 className="mt-3 text-3xl sm:text-4xl">The same service at every tier</h2>
+          <h2 className="mt-3 text-3xl sm:text-4xl">What every level includes</h2>
           <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {INCLUDED.map((it) => (
               <li key={it.name} className="card p-6">
                 <h3 className="text-lg text-bone">{it.name}</h3>
                 <p className="mt-2 text-[15px] leading-relaxed text-muted">{it.body}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {/* ── The three levels ── */}
+        <section id="levels" className="wrap mt-24 scroll-mt-24 sm:mt-32">
+          <p className="eyebrow">Three levels of service</p>
+          <h2 className="mt-3 text-3xl sm:text-4xl">Your team enters data daily. The level is how often we review it.</h2>
+          <ul className="mt-8 grid gap-4 sm:grid-cols-3">
+            {SERVICE_LEVELS.map((l) => (
+              <li key={l.id} className="card p-6">
+                <h3 className="text-lg text-bone">{l.name}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-bone/90">{l.reviews}</p>
+                <p className="mt-1 text-[15px] leading-relaxed text-muted">{l.calls}</p>
               </li>
             ))}
           </ul>
@@ -221,7 +236,7 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
                     {SENSOR_PLATFORMS.map((s) => (
                       <option key={s}>{s}</option>
                     ))}
-                    <option>TrolMaster</option>
+                    <option>TrolMaster only</option>
                   </select>
                 </div>
                 <div>

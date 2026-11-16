@@ -122,6 +122,8 @@ export type Checkin = {
   dryback?: number;
   observations: string;
   photoUrl?: string;
+  /** The canopy video for the day, in storage. See lib/video.ts. */
+  videoUrl?: string;
   /** Runoff by feed zone. The single runoff figures above are the averages of these. */
   zones?: ZoneRead[];
   submittedBy: "client" | "rgs";
@@ -235,6 +237,8 @@ export type Facility = {
   equipment: Record<string, string>;
   readiness: Readiness;
   readinessNote: string;
+  /** Which of the three levels of service the facility is on. Set by the consultant. See SERVICE_LEVELS. */
+  level?: "remote" | "middle" | "top";
   /** The daily and weekly list growers are prompted with. Unset means the house default. */
   tasks?: TaskTemplate[];
   sensors?: SensorConnection[];
