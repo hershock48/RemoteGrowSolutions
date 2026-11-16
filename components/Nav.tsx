@@ -13,9 +13,6 @@ export default function Nav() {
       <div className="wrap flex flex-wrap items-center gap-x-6 gap-y-1 py-3">
         <Link href="/" className="flex items-baseline gap-2 py-2 no-underline">
           <span className="font-display text-lg font-bold tracking-tight text-bone">{SITE.name}</span>
-          <span className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-muted md:inline">
-            by {SITE.parent.name}
-          </span>
         </Link>
         <Link href="/login" className="btn-small ml-auto sm:order-last">
           Client sign in

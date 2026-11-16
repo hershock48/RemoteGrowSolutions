@@ -24,12 +24,12 @@ export default async function Home({ searchParams }: { searchParams: SP }) {
         {/* ── Hero ── */}
         <section className="wrap pt-14 sm:pt-20">
           <div className="max-w-3xl">
-            <p className="eyebrow">{SITE.parent.name} presents</p>
+            <p className="eyebrow">Weekly cultivation management, run remotely</p>
             <h1 className="mt-5 text-[2.4rem] leading-[1.05] sm:text-6xl">
               Your flower rooms, reviewed every week by <span className="text-flare">someone who runs rooms</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-bone/85">
-              Remote Grow Solutions is a subscription. Your team submits three short check-ins a week per room. The
+              {SITE.name} is a subscription. Your team submits three short check-ins a week per room. The
               software compares every reading to the room&apos;s own targets and flags what is outside. Your consultant
               reviews the flagged rooms, spends an hour with you on the phone, and you get a written report of the week
               behind and the week ahead.

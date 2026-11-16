@@ -66,7 +66,7 @@ export default async function Notes({ params, searchParams }: { params: Promise<
                 <ul className="mt-2 space-y-1.5 text-[15px]">
                   {n.actions.map((a, i) => (
                     <li key={i} className="flex flex-wrap gap-x-2">
-                      <span className="pill">{a.owner === "rgs" ? "RGS" : "Grower"}</span>
+                      <span className="pill">{a.owner === "rgs" ? "Consultant" : "Grower"}</span>
                       <span className="text-bone/90">{a.text}</span>
                       {a.due && <span className="text-muted">by {fmtDay(a.due)}</span>}
                     </li>

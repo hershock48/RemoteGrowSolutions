@@ -56,8 +56,9 @@ export default async function Shell({
       <header className="z-30 border-b border-line bg-ink/95 backdrop-blur lg:sticky lg:top-0 print:hidden">
         <div className="wrap flex flex-wrap items-center gap-x-6 gap-y-0 py-1 lg:py-2">
           <Link href={viewer === "rgs" ? "/admin" : base} className="flex items-baseline gap-2 py-2 no-underline">
-            <span className="font-display text-base font-bold tracking-tight text-bone">{SITE.short}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted">{facility.name}</span>
+            <span className="whitespace-nowrap font-display text-base font-bold tracking-tight text-bone">{SITE.short}</span>
+            {/* The longer name of 2026-11-16 leaves no room for the facility beside it on a phone; every page there opens with it anyway. */}
+            <span className="hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-muted sm:inline">{facility.name}</span>
           </Link>
           {/* On a phone the tabs wrap to a second row so none is hidden, and the
               header scrolls away with the page; it only sticks where the

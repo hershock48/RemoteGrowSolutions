@@ -25,7 +25,7 @@ export const metadata: Metadata = { title: "Home" };
 type Tone = "ok" | "warn" | "miss" | "none";
 const DOT: Record<Tone, string> = { ok: "dot-ok", warn: "dot-warn", miss: "dot-miss", none: "dot-info" };
 const FILL: Record<Tone, string> = { ok: "bg-ok", warn: "bg-warn", miss: "bg-miss", none: "bg-muted" };
-const ENVIRONMENT = ["temp", "rh", "ppfd"];
+const ENVIRONMENT = ["temp", "rh", "vpd", "co2", "ppfd"];
 const RUNOFF = ["runoff-pct", "runoff-ec"];
 
 export default async function Home({ params }: { params: Promise<{ slug: string }> }) {

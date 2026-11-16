@@ -105,7 +105,7 @@ export function draftReport(input: WeekInput): Draft {
 
   // Week ahead: the calendar, then the crop clock.
   for (const e of upcoming.sort((a, b) => a.date.localeCompare(b.date))) {
-    ahead.push(`${fmtDay(e.date)}: ${e.title}${roomTag(e, rooms)} (${e.owner === "rgs" ? "RGS" : "grower"}).`);
+    ahead.push(`${fmtDay(e.date)}: ${e.title}${roomTag(e, rooms)} (${e.owner === "rgs" ? "consultant" : "grower"}).`);
   }
   for (const room of rooms.filter((r) => r.kind === "flower" && !r.archivedAt)) {
     const cycle = cycles.find((c) => c.roomId === room.id && c.status === "active");

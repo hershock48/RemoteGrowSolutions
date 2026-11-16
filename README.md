@@ -1,4 +1,10 @@
-# Remote Grow Solutions
+# MI-Gas x Plantsman Management
+
+Named Remote Grow Solutions (RGS) until 2026-11-16, when Jake renamed it. The
+new name is in `lib/site.ts` and on every screen a customer reads. The
+repository, the vercel.app address, the `RGS_` environment variables and the
+`rgs` viewer in the code keep the old initials; renaming a host or a variable
+is Kevin's to do, with a redeploy.
 
 The operating system behind Jake's second business: subscription cultivation
 management for commercial grows, run remotely. Growers submit three check-ins a
@@ -59,6 +65,30 @@ Two conflicts this round surfaced, both left as they were until Jake rules:
 
 - **Daily or three a week.** His sheet is Monday to Friday, so the default task list is weekdays. The public pages and `lib/pricing.ts` still promise three check-ins a week. One of them has to move.
 - **TrolMaster.** He now names it for temperature and RH graphs. The requirements list on the public page still says TrolMaster sensors are not supported, which was said about substrate sensors. The wording needs his eye.
+
+## The Aroya reference (2026-11-16, later the same day)
+
+Jake: Aroya's customer interface is the reference for presenting a profile
+simply, "without having to start from scratch or reinvent the wheel". Their
+app is behind a login, so what was read is what they publish: the dashboard
+and the run blueprint shown on aroya.io. Three things were taken from it.
+
+- **A row of rings for the room.** `components/Gauge.tsx`, at the top of the
+  room page: temperature, RH, VPD, CO2, substrate water content and EC, runoff
+  EC and runoff percent. Theirs colour each reading; ours colour the status,
+  green inside the room's setpoint and amber outside, with the setpoint band
+  drawn on the ring.
+- **Every room as one table.** The Rooms tab is one row a room and one column
+  a reading, with a status at the end, as on their dashboard. A value outside
+  its setpoint is amber. Runoff percent and genetics stay off it, by his note
+  of 2026-11-04.
+- **The run as a strip.** Weeks of flower across the top of the room page,
+  the current one lit.
+
+What stays different, and he said so himself: this is direct management, so
+runoff, the task list and the consultant's read sit beside the readings.
+VPD and CO2 now raise a flag against their setpoints like every other
+reading (`lib/rules.ts`), so the table and the status never disagree.
 
 ## Nothing here is rented
 

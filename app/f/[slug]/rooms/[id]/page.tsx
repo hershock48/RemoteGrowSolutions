@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Shell from "@/components/Shell";
 import LineChart, { Legend } from "@/components/LineChart";
 import EntryLog from "@/components/EntryLog";
+import Gauge from "@/components/Gauge";
 import RoomVisual from "@/components/RoomVisual";
 import ScheduleView from "@/components/ScheduleView";
 import SeriesCharts from "@/components/SeriesCharts";
@@ -13,6 +14,7 @@ import { loadBoard } from "@/lib/board";
 import { requireFacility } from "@/lib/load";
 import { store } from "@/lib/store";
 import { addDays, diffDays, flowerDay, fmtDay, fmtWhen } from "@/lib/dates";
+import { nowOf } from "@/lib/now";
 import { evaluateRoom } from "@/lib/rules";
 import { buildSchedule, parseHHMM } from "@/lib/schedule";
 import { ecSeries, rhSeries, runoffSeries, runReadings, tempSeries } from "@/lib/series";
@@ -30,6 +32,10 @@ export const metadata: Metadata = { title: "Room" };
  * environment against its setpoints. Uploaded sensor exports draw as graphs
  * under the heading they belong to, and a link opens the live platform.
  * The dated entries and the run sit below.
+ *
+ * Above all of it: a row of ring gauges, one per reading, coloured by
+ * status, and the run as a strip of weeks. That is the shape of the room
+ * view on Aroya, which he named as the reference for presenting a profile.
  */
 
 const MESSAGES: Record<string, string> = {
@@ -49,7 +55,6 @@ const ERRORS: Record<string, string> = {
 // and every action lands back on its own section.
 const WHERE: Record<string, "tasks" | "graphs"> = { checkin: "tasks", export: "graphs", "export-size": "graphs", "export-empty": "graphs", "export-read": "graphs", date: "tasks", title: "tasks" };
 
-const within = (v: number | undefined, r?: Range) => (v === undefined || !r ? null : v >= r[0] && v <= r[1]);
 const phaseLine = (p?: Phase) => (p ? `${p.start}, ${p.shots} shot${p.shots === 1 ? "" : "s"} of ${p.shotMin} min${p.shots > 1 ? `, ${p.everyMin} min apart` : ""}` : "Not set");
 
 export default async function RoomPage({ params, searchParams }: { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ saved?: string; err?: string }> }) {
@@ -91,7 +96,9 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
     },
   ];
   const co2: Series[] = [{ name: "CO₂ ppm", slot: "fourth", band: t.co2, dots: true, points: rs.filter((r) => r.c.co2 !== undefined).map((r) => ({ x: r.day, y: r.c.co2! })) }];
-  const latestVpd = vpdKpa(latest?.tempF, latest?.rh);
+  const now = nowOf(checkins);
+  const weeks = Math.max(1, Math.ceil(room.flowerDays / 7));
+  const week = day ? Math.min(weeks, Math.ceil(day / 7)) : 0;
   const built = buildSchedule(room.schedule, room.emittersPerPlant, room.emitterGph, room.containerGal);
   const lightsOn = parseHHMM(room.schedule?.lightsOn);
   const zoneEntry = checkins.find((c) => c.zones?.length);
@@ -144,6 +151,22 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
         </div>
       </div>
 
+      {cycle && week > 0 && (
+        <ol className="mt-5 flex gap-1" aria-label={`The run by week: week ${week} of ${weeks}`}>
+          {Array.from({ length: weeks }, (_, i) => {
+            const state = i + 1 < week ? "done" : i + 1 === week ? "now" : "next";
+            return (
+              <li key={i} className="min-w-0 flex-1" aria-current={state === "now" ? "step" : undefined}>
+                <span className={`block h-1.5 rounded-full ${state === "done" ? "bg-ok/70" : state === "now" ? "bg-flare" : "bg-line"}`} />
+                <span className={`mt-1 block text-center text-[10px] ${state === "now" ? "font-semibold text-flare" : "text-muted"}`} aria-hidden="true">
+                  W{i + 1}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
       <nav aria-label="On this page" className="mt-5 flex flex-wrap gap-x-5 gap-y-1 border-b border-line text-[12px] font-semibold uppercase tracking-[0.1em] text-muted">
         {[
           ["#tasks", "Tasks"],
@@ -159,6 +182,26 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
       </nav>
 
       {sp.saved && !WHERE[sp.saved] && <Note text={MESSAGES[sp.saved] ?? "Saved."} />}
+
+      {/* ── Latest readings, as rings ── */}
+      <section aria-label="Latest readings" className="card mt-6 p-4 sm:p-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <p className="eyebrow">Latest readings</p>
+          <span className="text-xs text-muted">
+            {now.day ? `Entered ${fmtDay(now.day)}` : "Nothing entered yet"}. Green is inside the setpoint, amber is outside it.
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-5 sm:grid-cols-4 xl:grid-cols-8">
+          <Gauge label="Temp" unit="°F" value={now.tempF} range={t.tempF} />
+          <Gauge label="RH" unit="%" value={now.rh} range={t.rh} />
+          <Gauge label="VPD" unit="kPa" value={now.vpd} range={t.vpd} digits={2} />
+          <Gauge label="CO₂" unit="ppm" value={now.co2} range={t.co2} />
+          <Gauge label="Substrate WC" unit="%" value={now.substrateWc} />
+          <Gauge label="Substrate EC" unit="mS/cm" value={now.substrateEc} />
+          <Gauge label="Runoff EC" unit="mS/cm" value={now.runoffEc} ceiling={t.runoffEcMax} />
+          <Gauge label="Runoff" unit="%" value={now.runoffPct} range={t.runoffPct} digits={1} />
+        </div>
+      </section>
 
       {/* ── The room and its profile ── */}
       <section className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_1fr]" aria-label="Room profile">
@@ -424,15 +467,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
           <h2 className="text-2xl text-bone">Environment</h2>
           {liveLink("environment graphs")}
         </div>
-        <dl className="mt-4 grid gap-px overflow-hidden rounded-xl2 border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
-          <Setpoint label="Temperature" unit="°F" range={t.tempF} value={latest?.tempF} />
-          <Setpoint label="RH" unit="%" range={t.rh} value={latest?.rh} />
-          <Setpoint label="VPD" unit="kPa" range={t.vpd} value={latestVpd} />
-          <Setpoint label="CO₂" unit="ppm" range={t.co2} value={latest?.co2} />
-        </dl>
-        <p className="mt-2 text-xs text-muted">
-          Setpoints from the room profile. Latest reading {latest ? `${latest.dayOfFlower !== undefined ? `day ${latest.dayOfFlower}, ` : ""}${fmtDay(latest.day)}` : "not entered yet"}. VPD is air VPD worked out from temperature and RH.
-        </p>
+        <p className="mt-2 text-xs text-muted">From the dated entries, against the setpoints on the room profile. VPD is air VPD worked out from temperature and RH.</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {[
             { title: "Temperature °F", series: tempSeries(rs, room), label: `Temperature for ${room.name}` },
@@ -615,20 +650,5 @@ function Note({ text, bad = false }: { text: string; bad?: boolean }) {
     <p className="mt-3 rounded-lg border border-ok/50 bg-ink-panel px-4 py-3 text-sm text-bone" role="status">
       {text}
     </p>
-  );
-}
-
-function Setpoint({ label, unit, range, value }: { label: string; unit: string; range?: Range; value?: number }) {
-  const ok = within(value, range);
-  return (
-    <div className="bg-ink-panel px-4 py-3">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">{label}</dt>
-      <dd className="mt-0.5 flex items-center gap-2 font-display text-xl font-bold text-bone">
-        <span className={`dot ${value === undefined ? "dot-miss" : ok === null ? "dot-info" : ok ? "dot-ok" : "dot-warn"}`} aria-hidden="true" />
-        {value === undefined ? "No reading" : `${value} ${unit}`}
-        <span className="sr-only">{value === undefined ? "" : ok === null ? "" : ok ? ", inside the setpoint" : ", outside the setpoint"}</span>
-      </dd>
-      <dd className="text-xs text-muted">{range ? `Setpoint ${range[0]} to ${range[1]} ${unit}` : "No setpoint on the profile"}</dd>
-    </div>
   );
 }

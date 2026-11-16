@@ -1,5 +1,6 @@
 import type { CalEvent, Checkin, Cycle, Room } from "./types";
 import { addDays, diffDays, flowerDay } from "./dates";
+import { vpdKpa } from "./vpd";
 
 /**
  * The exceptions engine. The consultant should open the dashboard to a short
@@ -112,6 +113,14 @@ export function evaluateRoom({ room, cycle, checkins, events, today }: RoomInput
         text: `RH ${latest.rh}% against ${t.rh[0]} to ${t.rh[1]}.`,
         day: latest.day,
       });
+    }
+    // VPD and CO2 only when the room carries a setpoint for them.
+    const vpd = vpdKpa(latest.tempF, latest.rh);
+    if (t.vpd && vpd !== undefined && !inRange(vpd, t.vpd)) {
+      flags.push({ ...base, severity: "attention", code: "vpd", text: `VPD ${vpd} kPa against ${t.vpd[0]} to ${t.vpd[1]}.`, day: latest.day });
+    }
+    if (t.co2 && !inRange(latest.co2, t.co2)) {
+      flags.push({ ...base, severity: "attention", code: "co2", text: `CO₂ ${latest.co2} ppm against ${t.co2[0]} to ${t.co2[1]}.`, day: latest.day });
     }
     if (t.ppfd && !inRange(latest.ppfd, t.ppfd)) {
       flags.push({

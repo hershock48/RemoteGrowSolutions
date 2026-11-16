@@ -9,9 +9,17 @@
  * PLACEHOLDER and listed in the README.
  */
 
+/**
+ * THE NAME. Jake renamed the product on 2026-11-16: "MI-Gas x Plantsman
+ * Management instead of RGS", spelled as he wrote it. It was Remote Grow
+ * Solutions (RGS) from its first build on 2026-11-04. The repository, the
+ * vercel.app address, the RGS_ environment variables and the "rgs" viewer in
+ * the code keep the old initials: none of them is read by a customer, and
+ * renaming a host or a variable is a change Kevin makes, with a redeploy.
+ */
 export const SITE = {
-  name: "Remote Grow Solutions",
-  short: "RGS",
+  name: "MI-Gas x Plantsman Management",
+  short: "MI-Gas x Plantsman",
   tagline: "Weekly cultivation management for commercial grows, run remotely",
   url: "https://rgs.glazedweb.com",
   /** PLACEHOLDER: the mailbox that receives inquiries. */
@@ -105,7 +113,7 @@ export const EQUIPMENT_CATEGORIES = [
   { id: "irrigation", name: "Irrigation", hint: "Controller, zones, pumps, emitters per plant, emitter flow rate." },
   { id: "substrate", name: "Substrate", hint: "Brand, type, container volume, plants per light." },
   { id: "nutrients", name: "Nutrients", hint: "Brand, product line, stock concentrations, mixing and dosing equipment." },
-  { id: "sensors", name: "Sensors", hint: "Platform, sensor types, count, how RGS gets access." },
+  { id: "sensors", name: "Sensors", hint: "Platform, sensor types, count, how the consultant gets access." },
   { id: "water", name: "Water", hint: "Source, treatment, starting EC and pH." },
   { id: "cultivation", name: "Cultivation", hint: "Genetics, plant density, veg and flower durations, harvest schedule." },
   { id: "operations", name: "Operations", hint: "Head grower, staffing, production targets, historical performance." },
@@ -120,7 +128,7 @@ export const SENSOR_PLATFORMS = ["Aroya", "Pinnacle", "Growlink", "Other substra
  * (2026-11-16). There is no password field anywhere: see saveSensors().
  */
 export const LIVE_PLATFORMS = ["Aroya", "Growlink", "TrolMaster", "Pinnacle", "Other"] as const;
-export const ACCESS_OPTIONS = ["Viewer invite sent to RGS", "API key requested from the vendor", "Exports uploaded by hand", "Not set up yet"] as const;
+export const ACCESS_OPTIONS = ["Viewer invite sent to the consultant", "API key requested from the vendor", "Exports uploaded by hand", "Not set up yet"] as const;
 
 /**
  * The runoff guide. PLACEHOLDER: the video has not been recorded. Put an

@@ -156,7 +156,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
                 {r.actions.map((a, i) => (
                   <tr key={i}>
                     <td>{a.text}</td>
-                    <td className="text-muted">{a.owner === "rgs" ? "RGS" : "Grower"}</td>
+                    <td className="text-muted">{a.owner === "rgs" ? "Consultant" : "Grower"}</td>
                     <td className="text-muted">{a.due ? fmtDay(a.due) : ""}</td>
                   </tr>
                 ))}

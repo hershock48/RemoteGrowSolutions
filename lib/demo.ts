@@ -89,7 +89,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       irrigation: "Growlink irrigation controller, 4 zones per room, 2 × 0.5 GPH Netafim emitters per plant.",
       substrate: "Grodan Hugo 6x6x6 on Grodan slabs; 1-gallon coco in veg.",
       nutrients: "Athena Pro Line, two-part, Dosatron injectors.",
-      sensors: "Aroya Teros 12, four per room, viewer access shared with RGS. TrolMaster for room temperature, RH and CO2.",
+      sensors: "Aroya Teros 12, four per room, viewer access shared with the consultant. TrolMaster for room temperature, RH and CO2.",
       water: "City water through RO, starting EC 0.1, pH 6.0 after RO.",
       cultivation: "GMO, Gelato 41, Permanent Marker. 12 plants per light. 21-day veg, 63-day flower, one room flipping every two weeks.",
       operations: "Head grower plus three cultivation techs. Target 55 g/sq ft. 2025 average 48 g/sq ft.",
@@ -97,7 +97,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
     readiness: "conditional",
     readinessNote: "Mother room has no RH control and clone success is running at 72%. Corrective plan agreed on the first call; reviewed at week 4.",
     sensors: [
-      { platform: "Aroya", account: "Northstar Cultivation", access: "Viewer invite sent to RGS", liveUrl: "https://aroya.io/", note: "Demo link: it opens Aroya's public site. A real facility pastes the address of its own dashboard." },
+      { platform: "Aroya", account: "Northstar Cultivation", access: "Viewer invite sent to the consultant", liveUrl: "https://aroya.io/", note: "Demo link: it opens Aroya's public site. A real facility pastes the address of its own dashboard." },
       { platform: "TrolMaster", account: "Northstar Flower", access: "Exports uploaded by hand", liveUrl: "", note: "Temperature, RH and CO2 for the four flower rooms." },
     ],
     passcodeSalt: salt,
