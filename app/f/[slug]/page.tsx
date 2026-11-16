@@ -5,6 +5,7 @@ import RoomVisual from "@/components/RoomVisual";
 import { TodayList, WeekStrip } from "@/components/TaskList";
 import { loadBoard } from "@/lib/board";
 import { requireFacility } from "@/lib/load";
+import { nowOf } from "@/lib/now";
 import { store } from "@/lib/store";
 import { addDays, diffDays, fmtDay, minutesNowIn } from "@/lib/dates";
 import { isLit } from "@/lib/schedule";
@@ -174,12 +175,13 @@ export default async function Home({ params }: { params: Promise<{ slug: string 
             const flags = d.flags.filter((f) => f.roomId === room.id);
             const has = (codes: string[]) => flags.some((f) => codes.includes(f.code));
             const stale = flags.some((f) => f.severity === "missing");
-            const latest = d.recent.get(room.id)?.[0];
+            // The newest value of each reading, as the gauges and the rules read them.
+            const now = nowOf(d.recent.get(room.id) ?? []);
             const t = rb ? tally(rb.today) : { done: 0, total: 0 };
             const marks: { name: string; tone: Tone }[] = [
-              { name: "Environment", tone: !latest || latest.tempF === undefined ? "miss" : has(ENVIRONMENT) ? "warn" : "ok" },
-              { name: "Feed", tone: !latest || latest.feedEc === undefined ? "miss" : has(["feed-ec"]) ? "warn" : "ok" },
-              { name: "Runoff", tone: !latest || latest.runoffEc === undefined ? "miss" : has(RUNOFF) ? "warn" : "ok" },
+              { name: "Environment", tone: now.tempF === undefined ? "miss" : has(ENVIRONMENT) ? "warn" : "ok" },
+              { name: "Feed", tone: now.feedEc === undefined ? "miss" : has(["feed-ec"]) ? "warn" : "ok" },
+              { name: "Runoff", tone: now.runoffEc === undefined ? "miss" : has(RUNOFF) ? "warn" : "ok" },
               { name: "Tasks", tone: !rb || t.total === 0 ? "none" : t.done === t.total ? "ok" : stale ? "miss" : "warn" },
             ];
             const tone: Tone = !rb ? "none" : stale ? "miss" : flags.some((f) => f.severity === "attention") ? "warn" : "ok";

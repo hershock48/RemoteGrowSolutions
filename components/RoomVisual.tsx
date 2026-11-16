@@ -52,7 +52,9 @@ export default function RoomVisual({
   const benches = benchesFor(room);
   const lights = room.fixtureCount || benches * 4;
   const plants = Math.round(lights * (room.plantsPerLight || 0));
-  const zones = Math.max(1, Math.min(benches, Math.floor(room.feedZones ?? 1)));
+  // The profile's own count, for the words. The drawing can show at most one zone a bench.
+  const feedZones = Math.max(1, Math.floor(room.feedZones ?? 1));
+  const zones = Math.min(benches, feedZones);
   const lightsPerBench = Math.max(1, Math.round(lights / benches));
   const drawnLights = Math.min(lightsPerBench, compact ? 6 : 8);
   const perRow = Math.min(Math.max(5, Math.round((plants || lights * 8) / benches / 2)), compact ? 9 : 13);
@@ -106,7 +108,7 @@ export default function RoomVisual({
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto w-full"
         role="img"
-        aria-label={`${room.name}: ${benches} benches, ${lights} lights${plants ? `, about ${plants} plants` : ""}, ${zones} feed zone${zones === 1 ? "" : "s"}${lit === undefined ? "" : on ? ", lights on" : ", lights off"}`}
+        aria-label={`${room.name}: ${benches} benches, ${lights} lights${plants ? `, about ${plants} plants` : ""}, ${feedZones} feed zone${feedZones === 1 ? "" : "s"}${lit === undefined ? "" : on ? ", lights on" : ", lights off"}`}
       >
         <defs>
           <linearGradient id={`${uid}f`} x1="0" y1="0" x2="0" y2="1">
@@ -256,7 +258,7 @@ export default function RoomVisual({
       {!compact && (
         <figcaption className="mt-2 text-xs text-muted">
           {benches} bench{benches === 1 ? "" : "es"} · {lights} light{lights === 1 ? "" : "s"}
-          {plants ? ` · about ${plants.toLocaleString("en-US")} plants` : ""} · {zones} feed zone{zones === 1 ? "" : "s"}
+          {plants ? ` · about ${plants.toLocaleString("en-US")} plants` : ""} · {feedZones} feed zone{feedZones === 1 ? "" : "s"}
           {room.canopySqft ? ` · ${room.canopySqft.toLocaleString("en-US")} sq ft` : ""}
           {lit === undefined ? "" : on ? " · lights on now" : " · lights off now"}. Drawn from the room profile{progress === undefined ? "" : "; the plants are sized to the day of flower"}
           {zones > 1 ? "; drip lines and bench ends are coloured by feed zone" : ""}.

@@ -85,7 +85,9 @@ export function TodayList({
 export function WeekGrid({ week, today }: { week: DayColumn[]; today: string }) {
   const days = week.filter((c) => c.states.length > 0);
   if (!days.length) return null;
-  const rows = days[0].states.map((s) => s.task);
+  // Every task due on any day of the week, in list order. A custom list can mix
+  // "every day" with "Monday to Friday", so no single day carries all the rows.
+  const rows = days.flatMap((c) => c.states.map((s) => s.task)).filter((t, i, all) => all.findIndex((x) => x.id === t.id) === i);
   return (
     <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="The week's checklist, scrolls sideways on a phone">
       <table className="w-full min-w-[460px] text-left text-[13px]">
@@ -110,6 +112,8 @@ export function WeekGrid({ week, today }: { week: DayColumn[]; today: string }) 
               </th>
               {days.map((c) => {
                 const s = c.states.find((x) => x.task.id === task.id);
+                // Not due that day: an empty cell, never a missed one.
+                if (!s) return <td key={c.day} className="border-b border-line/60 px-1 py-1.5" />;
                 const cls = c.future ? "border-line" : s?.done ? "border-ok bg-ok" : c.day === today ? "border-edge" : "border-miss/70";
                 return (
                   <td key={c.day} className="border-b border-line/60 px-1 py-1.5 text-center">

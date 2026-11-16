@@ -35,12 +35,18 @@ export const loadBoard = cache(async (facilityId: string, today: string): Promis
   const dash = await loadDashboard(facility, today);
   const weekOf = weekStart(today);
   const weekEnd = addDays(weekOf, 6);
-  const [entries, ticks, uploads] = await Promise.all([
+  const [entries, ticks, uploads, dated] = await Promise.all([
     store.checkinsBetween(facility.id, weekOf, weekEnd),
     store.ticksBetween(facility.id, weekOf, weekEnd),
     // Half a day of slack either side of the week, for the facility's offset from UTC.
     store.seriesSince(facility.id, Date.parse(`${weekOf}T00:00:00Z`) - 14 * 3_600_000),
+    // Scheduled items from the last two months, done ones included, so the
+    // "assigned" line can be judged as it stood on each day of the week.
+    store.eventsBetween(facility.id, addDays(weekOf, -60), weekEnd),
   ]);
+  // Anything still open from further back comes from the dashboard's own list.
+  const assigned = [...dated, ...dash.events.filter((e) => !dated.some((x) => x.id === e.id))].filter((e) => e.kind !== "flip" && e.kind !== "harvest");
+  const doneDay = (ms: number) => todayIn(facility.timezone, new Date(ms));
   const tasks = facility.tasks?.length ? facility.tasks : DEFAULT_TASKS;
   const daily = tasks.filter((t) => t.cadence !== "weekly");
   const weeklyTasks = tasks.filter((t) => t.cadence === "weekly");
@@ -59,7 +65,10 @@ export const loadBoard = cache(async (facilityId: string, today: string): Promis
       entries: mine,
       ticks: tickSet,
       uploads: uploadDays.filter((u) => u.roomId === room.id),
-      openAssigned: dash.events.filter((e) => e.roomId === room.id && !e.doneAt && e.kind !== "flip" && e.kind !== "harvest" && e.date <= day).length,
+      // Open ON THAT DAY: dated on or before it, and not yet done by its end.
+      // Counting what is open now turned Monday green when Monday's item was
+      // ticked on Wednesday.
+      openAssigned: assigned.filter((e) => e.roomId === room.id && e.date <= day && (!e.doneAt || doneDay(e.doneAt) > day)).length,
       photosOn,
     });
     const week: DayColumn[] = Array.from({ length: 7 }, (_, i) => {

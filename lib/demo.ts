@@ -45,6 +45,16 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
   // byte, for the same `today`.
   let n = 0;
   const id = (p: string) => `${p}_demo${String(++n).padStart(3, "0")}`;
+  // Everything written AFTER the entries gets its id from a counter of its own
+  // kind. With one shared counter, the number of weekdays behind `today`
+  // shifted every later id, so an instance seeded yesterday and one seeded
+  // today disagreed about which report or scheduled item an id named.
+  const kinds = new Map<string, number>();
+  const idOf = (p: string) => {
+    const k = (kinds.get(p) ?? 0) + 1;
+    kinds.set(p, k);
+    return `${p}_demo${String(k).padStart(3, "0")}`;
+  };
   const j = (v: unknown) => JSON.stringify(v);
   let seed = 0x2f6e2b1 ^ Number(today.replace(/-/g, "")); // same today, same numbers
   const random = () => {
@@ -232,7 +242,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       }
       const agg = runoffFromZones(zones);
       const c: Checkin = {
-        id: id("chk"),
+        id: `chk_demo${i + 1}_${day.replace(/-/g, "")}`,
         facilityId: facility.id,
         roomId: room.id,
         cycleId: cycle.id,
@@ -273,7 +283,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
   events.push({ date: addDays(today, 2), title: "Review Flower 02 substrate EC trend", kind: "review", owner: "rgs", source: "call", roomId: rooms[1].id });
   for (const e of events) {
     const row: CalEvent = {
-      id: id("ev"),
+      id: idOf("ev"),
       facilityId: facility.id,
       roomId: e.roomId,
       cycleId: e.cycleId,
@@ -340,7 +350,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       wcs.push(Math.round((wc + rnd(-0.15, 0.15, 2)) * 10) / 10);
       ecs.push(Math.round(((i === 0 ? 3.4 : 4.6) + (60 - wc) * 0.07 + (i === 1 ? k * 0.0022 : 0) + rnd(-0.03, 0.03, 2)) * 100) / 100);
     });
-    await saveSeries({ id: id("ser"), facilityId: facility.id, roomId: rooms[i].id, kind: "substrate", label: "Aroya export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { wc: wcs, ec: ecs } });
+    await saveSeries({ id: idOf("ser"), facilityId: facility.id, roomId: rooms[i].id, kind: "substrate", label: "Aroya export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { wc: wcs, ec: ecs } });
   }
   {
     const temp: number[] = [];
@@ -356,13 +366,13 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       vpd.push(vpdKpa(tF, h) ?? 0);
       co2.push(Math.round((on ? 1180 : 520) + rnd(-40, 40, 0)));
     }
-    await saveSeries({ id: id("ser"), facilityId: facility.id, roomId: rooms[0].id, kind: "environment", label: "TrolMaster export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { temp, rh, vpd, co2 } });
+    await saveSeries({ id: idOf("ser"), facilityId: facility.id, roomId: rooms[0].id, kind: "environment", label: "TrolMaster export, last three days", uploadedAt: now, by: "client", t: stamps, cols: { temp, rh, vpd, co2 } });
   }
 
   // Last week's call, written up.
   const lastCall = addDays(thisMonday, -4);
   const note: CallNote = {
-    id: id("call"),
+    id: idOf("call"),
     facilityId: facility.id,
     heldOn: lastCall,
     weekOf: weekStart(lastCall),
@@ -393,7 +403,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
   );
   const draft = draftReport({ weekOf, rooms, cycles, checkins: inWeek, events: evWeek, upcoming: evNext, flags });
   const report: Report = {
-    id: id("rep"),
+    id: idOf("rep"),
     facilityId: facility.id,
     weekOf,
     status: "approved",
@@ -412,7 +422,7 @@ export async function seedDemo(q: Querier, today: string): Promise<string> {
       { name: "Priya Natarajan", email: "", phone: "(555) 010-0144", facility: "Great Lakes Botanicals", state: "Michigan", lights: "420", rooms: "6", sensors: "Aroya", note: "", status: "contacted" },
     ];
     for (const i of inquiries) {
-      const row: Inquiry = { id: id("inq"), ...i, createdAt: now - rnd(1, 9, 0) * DAY };
+      const row: Inquiry = { id: idOf("inq"), ...i, createdAt: now - rnd(1, 9, 0) * DAY };
       await q.query(`INSERT INTO inquiries (id, created_at, data) VALUES ($1, $2, $3::jsonb)`, [row.id, row.createdAt, j(row)]);
     }
   }

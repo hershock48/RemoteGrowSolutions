@@ -8,7 +8,7 @@ import { int, num, q, safePath, SLUG, slugify, str } from "@/lib/forms";
 import { irrigation } from "@/lib/irrigation";
 import { buildSchedule, parseHHMM } from "@/lib/schedule";
 import { DEFAULT_TASKS, periodFor, runoffFromZones, tickKey } from "@/lib/tasks";
-import { parseSensorCsv } from "@/lib/sensorcsv";
+import { colsOfKind, parseSensorCsv } from "@/lib/sensorcsv";
 import { loadDashboard } from "@/lib/load";
 import { draftReport } from "@/lib/report";
 import { dayOf } from "@/lib/rules";
@@ -110,8 +110,11 @@ export async function saveRoom(fd: FormData): Promise<void> {
   };
   const lightsOn = str(fd, "lightsOn", 5);
   const lightsOff = str(fd, "lightsOff", 5);
-  const schedule: Schedule | undefined =
-    parseHHMM(lightsOn) !== null ? { lightsOn, lightsOff: parseHHMM(lightsOff) !== null ? lightsOff : lightsOn, p1: phase("p1"), p2: phase("p2") } : undefined;
+  // Any part of the schedule typed means both light times are needed. Without
+  // lights on, P1 and P2 were dropped in silence and the page said "Saved".
+  const scheduleTyped = [lightsOn, lightsOff, ...["p1", "p2"].flatMap((p) => [str(fd, `${p}Start`, 5), str(fd, `${p}Shots`, 6), str(fd, `${p}ShotMin`, 8)])].some(Boolean);
+  if (scheduleTyped && (parseHHMM(lightsOn) === null || parseHHMM(lightsOff) === null || lightsOn === lightsOff)) redirect(`${back}${q({ err: "lights" })}#schedule`);
+  const schedule: Schedule | undefined = parseHHMM(lightsOn) !== null ? { lightsOn, lightsOff, p1: phase("p1"), p2: phase("p2") } : undefined;
   const benches = int(fd, "benches");
   const feedZones = int(fd, "feedZones");
 
@@ -262,38 +265,75 @@ export async function saveCheckin(fd: FormData): Promise<void> {
   }
 
   const existing = await store.checkinForDay(room.id, day);
-  const touched = new Set(submitted.map((r) => r.zone));
-  const zones = [...(existing?.zones ?? []).filter((r) => !touched.has(r.zone)), ...submitted].sort((a, b) => a.zone - b.zone || a.n - b.n);
+  // WHAT AN EMPTY BOX MEANS. The form shows everything on file and posts every
+  // box back, so when it was drawn from the entry as it stands now, an empty
+  // box means "take this out": that is the only way a wrong number can be
+  // removed. The form carries the save time of the entry it was drawn from
+  // (`seen`). If the entry has been saved again since, by somebody else or in
+  // another tab, this form is out of date and its empty boxes mean nothing:
+  // then it only ADDS, reading by reading, and never removes.
+  const seen = Number(str(fd, "seen", 20)) || 0;
+  const upToDate = !existing || existing.at <= seen;
+
+  const readings: Partial<Record<(typeof fields)[number], number>> = {};
+  for (const f of fields) {
+    // A box the form did not show at all (shot length, on a room with a schedule) is left as it was.
+    const keep = !upToDate || !fd.has(f);
+    const v = values[f] ?? (keep ? existing?.[f] : undefined);
+    if (v !== undefined) readings[f] = v;
+  }
+
+  const slot = (r: ZoneRead) => `${r.zone}|${r.source}|${r.n}`;
+  const sent = new Set(submitted.map(slot));
+  const zones = (upToDate ? submitted : [...(existing?.zones ?? []).filter((r) => !sent.has(slot(r))), ...submitted]).sort((x, y) => x.zone - y.zone || x.n - y.n);
+
   const typed = str(fd, "observations", 3000);
+  const observations = upToDate ? typed : typed || existing?.observations || "";
   const photo = fd.get("photo");
   const hasPhoto = photo instanceof File && photo.size > 0;
-  if (Object.keys(values).length === 0 && submitted.length === 0 && !typed && !hasPhoto) redirect(`${back}&err=empty`);
+  if (!existing && Object.keys(values).length === 0 && submitted.length === 0 && !typed && !hasPhoto) redirect(`${back}&err=empty`);
+
+  // An entry that predates runoff by zone carries single runoff figures and no
+  // zone reads. The zone boxes are empty for it, and that must not erase them.
+  const legacyRunoff = !existing?.zones?.length ? { runoffEc: existing?.runoffEc, runoffPh: existing?.runoffPh, runoffMl: existing?.runoffMl } : {};
+  const agg = zones.length ? runoffFromZones(zones) : legacyRunoff;
+
+  // Everything was cleared: the day has no entry any more.
+  if (existing && Object.keys(readings).length === 0 && zones.length === 0 && !observations && !hasPhoto && !existing.photoUrl && agg.runoffEc === undefined && agg.runoffMl === undefined) {
+    await store.deleteCheckin(existing.id);
+    revalidatePath(base, "layout");
+    redirect(`${base}/rooms/${room.id}${q({ saved: "cleared" })}#tasks`);
+  }
 
   const cycle = await store.activeCycle(room.id);
-  const merged = { ...existing, ...values };
+  // A day before the flip belongs to no run, or to an earlier one. Giving it
+  // the current run's id dropped it from every chart.
+  const inRun = cycle && day >= cycle.flipDate ? cycle : null;
   // The day's volume comes from the room's schedule when it has one, so the
   // grower is not asked to retype what the controller already runs.
   const built = buildSchedule(room.schedule, room.emittersPerPlant, room.emitterGph, room.containerGal);
   const dailyMl =
     built.dailyMl > 0
       ? built.dailyMl
-      : irrigation({ emittersPerPlant: room.emittersPerPlant, emitterGph: room.emitterGph, shotMin: merged.shotMin ?? 0, shotsPerDay: merged.shotsPerDay ?? 0 }).dailyMl;
-  const agg = zones.length ? runoffFromZones(zones) : { runoffEc: existing?.runoffEc, runoffPh: existing?.runoffPh, runoffMl: existing?.runoffMl };
+      : irrigation({ emittersPerPlant: room.emittersPerPlant, emitterGph: room.emitterGph, shotMin: readings.shotMin ?? 0, shotsPerDay: readings.shotsPerDay ?? 0 }).dailyMl;
 
   const checkin: Checkin = {
-    ...merged,
-    id: existing?.id ?? newId("chk"),
+    // One id per room and day, so two first saves at the same moment land on
+    // one record and the second does not become a duplicate entry.
+    id: existing?.id ?? `chk_${room.id}_${day}`,
     facilityId: facility.id,
     roomId: room.id,
-    cycleId: existing?.cycleId ?? cycle?.id,
+    cycleId: existing?.cycleId ?? inRun?.id,
     at: Date.now(),
     day,
-    dayOfFlower: existing?.dayOfFlower ?? dayOf(cycle, day),
+    dayOfFlower: existing?.dayOfFlower ?? dayOf(inRun, day),
+    ...readings,
     ...agg,
     feedMl: dailyMl > 0 ? dailyMl : undefined,
     runoffPct: agg.runoffMl !== undefined && dailyMl > 0 ? (agg.runoffMl / dailyMl) * 100 : undefined,
     zones: zones.length ? zones : undefined,
-    observations: typed || existing?.observations || "",
+    observations,
+    photoUrl: existing?.photoUrl,
     submittedBy: viewer,
   };
 
@@ -421,8 +461,12 @@ export async function checkSensorKey(fd: FormData): Promise<void> {
   const check = plain
     ? await checkAroyaKey(plain)
     : { ok: false, text: "The key on file can no longer be read. Enter it again." };
-  const sensors = (facility.sensors ?? []).map((s, j) => (j === i && s.key ? { ...s, key: { ...s.key, check: { at: Date.now(), ...check } } } : s));
-  await store.saveFacility({ ...facility, sensors, updatedAt: Date.now() });
+  // The check can wait on Aroya for several seconds. Anything saved on the
+  // facility meanwhile (the task list, the profile, this very key removed)
+  // must not be undone by writing back the copy read before the wait.
+  const now = (await store.facilityById(facility.id)) ?? facility;
+  const sensors = (now.sensors ?? []).map((s) => (s.key && s.key.sealed === row.key!.sealed ? { ...s, key: { ...s.key, check: { at: Date.now(), ...check } } } : s));
+  await store.saveFacility({ ...now, sensors, updatedAt: Date.now() });
   revalidatePath(base, "layout");
   redirect(`${base}/profile${q({ saved: "keycheck" })}#sensors`);
 }
@@ -445,17 +489,14 @@ export async function uploadSeries(fd: FormData): Promise<void> {
   if (!text.trim()) redirect(`${back}${q({ err: "export-empty" })}#graphs`);
   const parsed = parseSensorCsv(text);
   if (parsed.error) redirect(`${back}${q({ err: "export-read" })}#graphs`);
-  await store.saveSeries({
-    id: newId("ser"),
-    facilityId: facility.id,
-    roomId: room.id,
-    kind: parsed.kind,
-    label,
-    uploadedAt: Date.now(),
-    by: viewer,
-    t: parsed.t,
-    cols: parsed.cols,
-  });
+  // One export often carries substrate and climate columns together. Each
+  // kind is stored on its own, so its charts sit under the right heading and
+  // the right line on the checklist ticks.
+  for (const kind of ["substrate", "environment"] as const) {
+    const cols = colsOfKind(parsed.cols, kind);
+    if (!Object.keys(cols).length) continue;
+    await store.saveSeries({ id: newId("ser"), facilityId: facility.id, roomId: room.id, kind, label, uploadedAt: Date.now(), by: viewer, t: parsed.t, cols });
+  }
   revalidatePath(base, "layout");
   redirect(`${back}${q({ saved: "export" })}#graphs`);
 }

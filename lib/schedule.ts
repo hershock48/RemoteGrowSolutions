@@ -91,6 +91,7 @@ export function buildSchedule(s: Schedule | undefined, emittersPerPlant: number,
     const start = parseHHMM(p.start)!;
     const each = shotMl(emittersPerPlant, emitterGph, p.shotMin);
     const shots = Math.min(60, Math.floor(p.shots));
+    if (((start - on + DAY * 4) % DAY) + (shots - 1) * p.everyMin + p.shotMin > DAY) warnings.push(`${name} runs past a full day from lights on, so its late shots wrap round to the start. Use fewer shots or bring them closer together.`);
     if (shots > 1 && p.everyMin < p.shotMin) warnings.push(`${name} shots are ${p.everyMin} minutes apart but run ${p.shotMin}, so they overlap.`);
     for (let i = 0; i < shots; i++) {
       const at = start + i * p.everyMin;

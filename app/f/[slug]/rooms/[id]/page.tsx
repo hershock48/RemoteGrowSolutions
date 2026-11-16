@@ -40,6 +40,7 @@ export const metadata: Metadata = { title: "Room" };
 
 const MESSAGES: Record<string, string> = {
   checkin: "Saved. The checklist below has been updated.",
+  cleared: "Everything was cleared, so that day has no entry now.",
   export: "Export added. It is drawn above, under irrigation or environment.",
   "1": "Saved.",
 };
@@ -53,7 +54,7 @@ const ERRORS: Record<string, string> = {
 
 // A message is shown beside the thing it is about, because the page is long
 // and every action lands back on its own section.
-const WHERE: Record<string, "tasks" | "graphs"> = { checkin: "tasks", export: "graphs", "export-size": "graphs", "export-empty": "graphs", "export-read": "graphs", date: "tasks", title: "tasks" };
+const WHERE: Record<string, "tasks" | "graphs"> = { checkin: "tasks", cleared: "tasks", export: "graphs", "export-size": "graphs", "export-empty": "graphs", "export-read": "graphs", date: "tasks", title: "tasks" };
 
 const phaseLine = (p?: Phase) => (p ? `${p.start}, ${p.shots} shot${p.shots === 1 ? "" : "s"} of ${p.shotMin} min${p.shots > 1 ? `, ${p.everyMin} min apart` : ""}` : "Not set");
 
@@ -68,7 +69,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
     store.checkinsForRoom(room.id, 200),
     store.cycles(facility.id),
     store.openEventsBefore(facility.id, addDays(today, 1)),
-    store.eventsForRoom(room.id, facility.id, addDays(today, -7)),
+    store.eventsForRoom(room.id, facility.id, addDays(today, -90)),
     store.seriesForRoom(room.id, 6),
     loadBoard(facility.id, today),
   ]);
@@ -106,13 +107,18 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
   const substrate = uploaded.filter((s) => s.kind === "substrate");
   const environment = uploaded.filter((s) => s.kind === "environment");
   const sensors = facility.sensors ?? [];
+  // "None yet" is an answer on the profile, never the name of a platform.
+  const platform = room.sensorPlatform && room.sensorPlatform !== "None yet" ? room.sensorPlatform : "";
   const live = sensors.find((s) => s.liveUrl && room.sensorPlatform && s.platform.toLowerCase() === room.sensorPlatform.toLowerCase()) ?? sensors.find((s) => s.liveUrl);
   const tone = !cycle ? "none" : flags.some((f) => f.severity === "missing") ? "miss" : flags.length ? "warn" : "ok";
 
   // Scheduled items for this room: everything open, plus what was closed in the last week.
   const items = new Map<string, CalEvent>();
   for (const e of open) if (e.roomId === room.id && e.kind !== "flip" && e.kind !== "harvest") items.set(e.id, e);
-  for (const e of upcoming) if (e.kind !== "flip" && e.kind !== "harvest" && (!e.doneAt || diffDays(e.date, today) <= 7) && diffDays(today, e.date) <= 28) items.set(e.id, e);
+  // A done item stays for a week after it was TICKED, whatever its date, so a
+  // tick made by mistake on an old item can be taken back.
+  const weekAgo = Date.now() - 7 * 86_400_000;
+  for (const e of upcoming) if (e.kind !== "flip" && e.kind !== "harvest" && (e.doneAt ? e.doneAt >= weekAgo : true) && diffDays(today, e.date) <= 28) items.set(e.id, e);
   const scheduled = [...items.values()].sort((a, b) => a.date.localeCompare(b.date));
   const tasksToday = rb ? tally(rb.today) : null;
 
@@ -123,7 +129,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
       </a>
     ) : (
       <Link href={`${base}/profile#sensors`} className="py-1 text-xs font-semibold text-flare hover:underline">
-        Connect {room.sensorPlatform || "a sensor platform"} for live {what}
+        Connect {platform || "a sensor platform"} for live {what}
       </Link>
     );
 
@@ -499,7 +505,7 @@ export default async function RoomPage({ params, searchParams }: { params: Promi
         {sp.saved && WHERE[sp.saved] === "graphs" && <Note text={MESSAGES[sp.saved]} />}
         {sp.err && WHERE[sp.err] === "graphs" && <Note text={ERRORS[sp.err]} bad />}
         <p className="mt-1 max-w-3xl text-sm text-muted">
-          Export the room from {room.sensorPlatform || "Aroya, Growlink or TrolMaster"} as a CSV and upload it. Water content, substrate EC, temperature, RH, VPD and CO₂ columns are read by their headers and drawn above, under irrigation or environment.
+          Export the room from {platform || "Aroya, Growlink or TrolMaster"} as a CSV and upload it. Water content, substrate EC, temperature, RH, VPD and CO₂ columns are read by their headers and drawn above, under irrigation or environment.
         </p>
         <form action={uploadSeries} className="mt-4 grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
           <input type="hidden" name="slug" value={facility.slug} />

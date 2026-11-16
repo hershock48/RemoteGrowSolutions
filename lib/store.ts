@@ -251,9 +251,11 @@ export const store = {
     return rows.map((r) => r.data as Checkin);
   },
   /** The latest few per room, newest first, for the rules engine. */
-  async recentCheckins(facilityId: string, perRoom = 4): Promise<Map<string, Checkin[]>> {
+  async recentCheckins(facilityId: string, perRoom = 8): Promise<Map<string, Checkin[]>> {
     const d = await db();
-    const { rows } = await d.query(`SELECT data FROM checkins WHERE facility_id = $1 ORDER BY day DESC, at DESC LIMIT 400`, [facilityId]);
+    // Eight a room, not four: entries are per day and often partial, so the
+    // rules look across a week of them for each reading (lib/rules.ts).
+    const { rows } = await d.query(`SELECT data FROM checkins WHERE facility_id = $1 ORDER BY day DESC, at DESC LIMIT 800`, [facilityId]);
     const out = new Map<string, Checkin[]>();
     for (const r of rows) {
       const c = r.data as Checkin;
@@ -270,6 +272,10 @@ export const store = {
     const d = await db();
     const { rows } = await d.query(`SELECT data FROM checkins WHERE room_id = $1 AND day = $2 ORDER BY at DESC LIMIT 1`, [roomId, day]);
     return rows.length ? (rows[0].data as Checkin) : null;
+  },
+  async deleteCheckin(id: string) {
+    const d = await db();
+    await d.query(`DELETE FROM checkins WHERE id = $1`, [id]);
   },
   async checkin(id: string): Promise<Checkin | null> {
     const d = await db();
@@ -369,7 +375,9 @@ export const store = {
       await d.query(`DELETE FROM task_ticks WHERE id = $1`, [t.id]);
       return false;
     }
-    await d.query(`INSERT INTO task_ticks (id, facility_id, room_id, period, data) VALUES ($1, $2, $3, $4, $5::jsonb)`, [t.id, t.facilityId, t.roomId, t.period, j(t)]);
+    // A double press arrives as two requests that both saw no row. The second
+    // insert must land softly, not as a duplicate-key error page.
+    await d.query(`INSERT INTO task_ticks (id, facility_id, room_id, period, data) VALUES ($1, $2, $3, $4, $5::jsonb) ON CONFLICT (id) DO NOTHING`, [t.id, t.facilityId, t.roomId, t.period, j(t)]);
     return true;
   },
 

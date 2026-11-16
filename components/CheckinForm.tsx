@@ -16,6 +16,10 @@ import type { Checkin, Room } from "@/lib/types";
  * schedule on the room profile, so nobody retypes shot counts; a room with no
  * schedule yet still gets the two shot boxes.
  *
+ * Clearing a box and saving removes that reading: the form shows what is on
+ * file, so an empty box is a decision, with one exception the action handles
+ * (a form that is out of date only ever adds).
+ *
  * A plain <form> posting to a server action. The runoff percentage shown
  * while typing is a layer on top; with scripts off the same form submits and
  * the server does the sums.
@@ -62,6 +66,7 @@ export default function CheckinForm({
   const zones = Math.max(1, Math.floor(room.feedZones ?? 1));
   const t = room.targets;
   const hasSchedule = scheduleMl > 0;
+  const [photoNote, setPhotoNote] = useState("");
   const [live, setLive] = useState<{ daily: number; runoff: number | null }>({
     daily: hasSchedule ? scheduleMl : (existing?.feedMl ?? 0),
     runoff: existing?.runoffPct ?? null,
@@ -136,6 +141,8 @@ export default function CheckinForm({
       <input type="hidden" name="slug" value={slug} />
       <input type="hidden" name="roomId" value={room.id} />
       <input type="hidden" name="day" value={day} />
+      {/* The save time of the entry these boxes were filled from. See saveCheckin. */}
+      <input type="hidden" name="seen" value={existing?.at ?? 0} />
 
       {err === "date" && <p className="error">That day has not happened yet, or is not a date.</p>}
       {err === "runoff" && <p className="error">One of the runoff reads is not a number.</p>}
@@ -233,8 +240,27 @@ export default function CheckinForm({
           </label>
           {photos ? (
             <>
-              <input id="photo" name="photo" type="file" accept="image/*" capture="environment" className="block w-full text-sm text-muted file:mr-3 file:rounded-full file:border file:border-edge file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bone" />
+              <input
+                id="photo"
+                name="photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                aria-describedby="photo-note"
+                onChange={(e) => {
+                  // Checked here because a file over the server's limit never reaches
+                  // the action: the request is refused whole and the typed entry with it.
+                  const file = e.currentTarget.files?.[0];
+                  if (file && file.size > 4 * 1024 * 1024) {
+                    e.currentTarget.value = "";
+                    setPhotoNote(`That photo is ${(file.size / 1048576).toFixed(1)} MB. The limit is 4 MB, so it was not attached. Lower the camera's resolution or send it another way.`);
+                  } else setPhotoNote("");
+                }}
+                className="block w-full text-sm text-muted file:mr-3 file:rounded-full file:border file:border-edge file:bg-ink file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bone" />
               <span className="hint">Same spot, same framing every time. Up to 4 MB. {existing?.photoUrl ? "A photo is already on this day; a new one replaces it." : ""}</span>
+              <span id="photo-note" role="status" className={photoNote ? "error" : "sr-only"}>
+                {photoNote}
+              </span>
             </>
           ) : (
             <p className="text-sm text-muted">Photo uploads are not switched on for this deployment yet. The entry saves without one.</p>

@@ -75,6 +75,26 @@ export function parseWallTime(s: string): number | null {
   return null;
 }
 
+/**
+ * One cell as a number, or null when it is not one. "N/A", "null", "--" and
+ * an empty cell are gaps: they were being stripped to nothing and read as 0,
+ * which drew a spike to zero at every gap. A decimal comma ("23,5", in files
+ * that separate columns with ; or a tab) is a decimal, not 235.
+ */
+export function cellNumber(raw: string, delim = ","): number | null {
+  let t = raw.trim();
+  if (delim !== "," && /^[-+]?\d+,\d+$/.test(t)) t = t.replace(",", ".");
+  const cleaned = t.replace(/[^0-9.+\-eE]/g, "");
+  if (!/\d/.test(cleaned)) return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** The columns of one kind. One export often carries both, and each belongs under its own heading. */
+export function colsOfKind(cols: Record<string, (number | null)[]>, kind: "substrate" | "environment"): Record<string, (number | null)[]> {
+  return Object.fromEntries(Object.entries(cols).filter(([k]) => SERIES_COLUMNS[k]?.kind === kind));
+}
+
 export function parseSensorCsv(text: string): Parsed {
   const fail = (error: string): Parsed => ({ t: [], cols: {}, kind: "substrate", rows: 0, error });
   const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim().length);
@@ -101,10 +121,7 @@ export function parseSensorCsv(text: string): Parsed {
     if (t === null) continue;
     rows.push({
       t,
-      v: picked.map(([, i]) => {
-        const n = Number((cells[i] ?? "").replace(/[^0-9.+\-eE]/g, ""));
-        return (cells[i] ?? "").trim() === "" || !Number.isFinite(n) ? null : n;
-      }),
+      v: picked.map(([, i]) => cellNumber(cells[i] ?? "", delim)),
     });
   }
   if (rows.length < 2) return fail("The time column could not be read. It needs a date and a time on every row.");

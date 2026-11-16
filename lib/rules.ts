@@ -37,6 +37,8 @@ export const MISSING_AFTER_DAYS = 3;
 export const LOOKAHEAD_DAYS = 7;
 /** A change in runoff percentage this large against the prior average is worth a sentence. */
 export const DRIFT_POINTS = 5;
+/** How far back from the newest entry a reading still counts as the room's current one. */
+export const READING_WINDOW_DAYS = 7;
 
 export type RoomInput = {
   room: Room;
@@ -78,81 +80,51 @@ export function evaluateRoom({ room, cycle, checkins, events, today }: RoomInput
 
   if (latest) {
     const t = room.targets;
-    if (latest.runoffPct !== undefined && !inRange(latest.runoffPct, t.runoffPct)) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "runoff-pct",
-        text: `Runoff ${one(latest.runoffPct)}% against a ${t.runoffPct[0]} to ${t.runoffPct[1]}% target.`,
-        day: latest.day,
-      });
-    }
-    if (latest.runoffEc !== undefined && t.runoffEcMax !== undefined && latest.runoffEc > t.runoffEcMax) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "runoff-ec",
-        text: `Runoff EC ${one(latest.runoffEc)} above the room's ${one(t.runoffEcMax)} ceiling.`,
-        day: latest.day,
-      });
-    }
-    if (!inRange(latest.tempF, t.tempF)) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "temp",
-        text: `Temperature ${latest.tempF}°F against ${t.tempF[0]} to ${t.tempF[1]}.`,
-        day: latest.day,
-      });
-    }
-    if (!inRange(latest.rh, t.rh)) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "rh",
-        text: `RH ${latest.rh}% against ${t.rh[0]} to ${t.rh[1]}.`,
-        day: latest.day,
-      });
-    }
-    // VPD and CO2 only when the room carries a setpoint for them.
-    const vpd = vpdKpa(latest.tempF, latest.rh);
-    if (t.vpd && vpd !== undefined && !inRange(vpd, t.vpd)) {
-      flags.push({ ...base, severity: "attention", code: "vpd", text: `VPD ${vpd} kPa against ${t.vpd[0]} to ${t.vpd[1]}.`, day: latest.day });
-    }
-    if (t.co2 && !inRange(latest.co2, t.co2)) {
-      flags.push({ ...base, severity: "attention", code: "co2", text: `CO₂ ${latest.co2} ppm against ${t.co2[0]} to ${t.co2[1]}.`, day: latest.day });
-    }
-    if (t.ppfd && !inRange(latest.ppfd, t.ppfd)) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "ppfd",
-        text: `PPFD ${latest.ppfd} against ${t.ppfd[0]} to ${t.ppfd[1]}.`,
-        day: latest.day,
-      });
-    }
-    if (t.feedEc && !inRange(latest.feedEc, t.feedEc)) {
-      flags.push({
-        ...base,
-        severity: "attention",
-        code: "feed-ec",
-        text: `Feed EC ${one(latest.feedEc!)} against ${one(t.feedEc[0])} to ${one(t.feedEc[1])}.`,
-        day: latest.day,
-      });
-    }
+    // READING BY READING. An entry for a day is filled in over the day and is
+    // often partial: temperature in the morning, runoff after the last shot. So
+    // each rule looks at the newest entry that CARRIES its reading, inside a
+    // week of the newest entry. Judging the newest entry alone meant that
+    // saving Saturday's temperature made Friday's runoff EC flag disappear
+    // (found in review, 2026-11-16), while the gauges still showed it amber.
+    const pool = checkins.filter((c) => diffDays(c.day, latest.day) <= READING_WINDOW_DAYS);
+    const pick = (k: "runoffPct" | "runoffEc" | "tempF" | "rh" | "co2" | "ppfd" | "feedEc") => {
+      const hit = pool.find((c) => typeof c[k] === "number");
+      return hit ? { v: hit[k] as number, day: hit.day } : undefined;
+    };
+    const flag = (code: string, text: string, day: string) => flags.push({ ...base, severity: "attention", code, text, day });
+
+    const pct = pick("runoffPct");
+    if (pct && !inRange(pct.v, t.runoffPct)) flag("runoff-pct", `Runoff ${one(pct.v)}% against a ${t.runoffPct[0]} to ${t.runoffPct[1]}% target.`, pct.day);
+    const rec = pick("runoffEc");
+    if (rec && t.runoffEcMax !== undefined && rec.v > t.runoffEcMax) flag("runoff-ec", `Runoff EC ${one(rec.v)} above the room's ${one(t.runoffEcMax)} ceiling.`, rec.day);
+    const temp = pick("tempF");
+    if (temp && !inRange(temp.v, t.tempF)) flag("temp", `Temperature ${temp.v}°F against ${t.tempF[0]} to ${t.tempF[1]}.`, temp.day);
+    const rh = pick("rh");
+    if (rh && !inRange(rh.v, t.rh)) flag("rh", `RH ${rh.v}% against ${t.rh[0]} to ${t.rh[1]}.`, rh.day);
+    // VPD from the temperature and RH of one and the same entry, never a mix of two days.
+    const both = pool.find((c) => c.tempF !== undefined && c.rh !== undefined);
+    const vpd = both ? vpdKpa(both.tempF, both.rh) : undefined;
+    if (t.vpd && both && vpd !== undefined && !inRange(vpd, t.vpd)) flag("vpd", `VPD ${vpd} kPa against ${t.vpd[0]} to ${t.vpd[1]}.`, both.day);
+    const co2 = pick("co2");
+    if (t.co2 && co2 && !inRange(co2.v, t.co2)) flag("co2", `CO₂ ${co2.v} ppm against ${t.co2[0]} to ${t.co2[1]}.`, co2.day);
+    const ppfd = pick("ppfd");
+    if (t.ppfd && ppfd && !inRange(ppfd.v, t.ppfd)) flag("ppfd", `PPFD ${ppfd.v} against ${t.ppfd[0]} to ${t.ppfd[1]}.`, ppfd.day);
+    const fec = pick("feedEc");
+    if (t.feedEc && fec && !inRange(fec.v, t.feedEc)) flag("feed-ec", `Feed EC ${one(fec.v)} against ${one(t.feedEc[0])} to ${one(t.feedEc[1])}.`, fec.day);
 
     // Drift: the newest runoff percentage against the mean of the three before it.
-    const prior = checkins.slice(1, 4).map((c) => c.runoffPct).filter((v): v is number => v !== undefined);
-    if (latest.runoffPct !== undefined && prior.length >= 2) {
-      const mean = prior.reduce((a, b) => a + b, 0) / prior.length;
-      const delta = latest.runoffPct - mean;
-      if (Math.abs(delta) >= DRIFT_POINTS && inRange(latest.runoffPct, t.runoffPct)) {
+    const withPct = checkins.filter((c) => c.runoffPct !== undefined);
+    const prior = withPct.slice(1, 4).map((c) => c.runoffPct as number);
+    if (pct && prior.length >= 2) {
+      const mean = prior.reduce((x, y) => x + y, 0) / prior.length;
+      const delta = pct.v - mean;
+      if (Math.abs(delta) >= DRIFT_POINTS && inRange(pct.v, t.runoffPct)) {
         flags.push({
           ...base,
           severity: "info",
           code: "runoff-drift",
           text: `Runoff moved ${delta > 0 ? "up" : "down"} ${one(Math.abs(delta))} points against the prior average of ${one(mean)}%.`,
-          day: latest.day,
+          day: pct.day,
         });
       }
     }

@@ -107,6 +107,11 @@ export default function RoomForm({ slug, room, err }: { slug: string; room?: Roo
         <fieldset id="schedule" className="card scroll-mt-28 p-6">
           <legend className="eyebrow px-1">Lights and irrigation schedule</legend>
           <p className="mt-2 text-sm text-muted">P1 is the ramp from lights on to field capacity, P2 the maintenance shots after it. Times are on the facility clock, 24 hour.</p>
+          {err === "lights" && (
+            <p className="error" role="alert">
+              Nothing was saved. A schedule needs both a lights on and a lights off time, and they cannot be the same.
+            </p>
+          )}
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Field id="lightsOn" label="Lights on">
               <input id="lightsOn" name="lightsOn" className="field" type="time" defaultValue={s?.lightsOn ?? ""} />

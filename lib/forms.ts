@@ -38,7 +38,7 @@ export type Errors = Record<string, string>;
 /** Query-string messages the screens render, so every form works without JavaScript. */
 /** A redirect target we will honor: a path on this site, never a protocol-relative URL. */
 export const safePath = (s: string, fallback: string): string =>
-  s.startsWith("/") && !s.startsWith("//") && !s.startsWith("/\\") ? s : fallback;
+  s.startsWith("/") && !s.startsWith("//") && !/[\u0000-\u001f\\]/.test(s) ? s : fallback;
 
 export function q(params: Record<string, string | undefined>): string {
   const s = new URLSearchParams();

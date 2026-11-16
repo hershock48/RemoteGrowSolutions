@@ -102,6 +102,42 @@ the lights-on window the room is drawn dark and the caption says so. The wall
 units and the door are decoration. It is still a fixed view, not a model that
 turns.
 
+## Review of 2026-11-16, and what it changed
+
+Kevin asked for all of the day's work to be double checked. A second,
+read-only session reviewed the whole diff and a scripted browser walked a new,
+empty facility through every screen and action on a production build. No
+authorization hole and no leak of a stored key was found. These were, and each
+is fixed and held by a test in `lib/__tests__/review.test.ts` or by the walk:
+
+- **A later partial entry hid an earlier flag.** The rules judged the newest
+  entry alone, and entries are now filled in over a day. Saving Saturday's
+  temperature removed Friday's runoff EC flag. Rules, the home marks, the
+  gauges and the rooms table now all read reading by reading, from the newest
+  entry that carries it, inside a week.
+- **A reading could not be removed.** The form is prefilled, and a cleared box
+  was read as "keep". A cleared box now removes the reading, and clearing
+  everything removes the day's entry. The exception: a form drawn before
+  somebody else's save is out of date, and it only ever adds (`seen` in
+  `saveCheckin`).
+- **A gap in a sensor export drew as zero**, and a decimal comma lost its
+  comma. `cellNumber` in `lib/sensorcsv.ts`.
+- **One export with substrate and climate columns** was filed whole under
+  substrate. It is stored as two series now, so each sits under its own
+  heading and ticks its own line.
+- **A schedule typed without "lights on" was dropped in silence.** It is
+  refused with a sentence.
+- **The "assigned" line rewrote past days**, an old item ticked by mistake
+  vanished, two saves at the same instant made two entries, a double press on
+  a tick could error, the Aroya key check could write back a stale copy of
+  the facility, an oversized photo lost the typed entry, the drawing's caption
+  under-counted feed zones, and the demo's ids moved with the calendar.
+
+Left as they are, knowingly: every facility write is still a whole-document
+read then write, so two people saving the same facility in the same second
+can lose one change; and a facility's sensor platforms are matched to their
+keys by position.
+
 ## Nothing here is rented
 
 | Usually rented | Here |
